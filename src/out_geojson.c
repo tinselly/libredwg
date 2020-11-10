@@ -586,10 +586,12 @@ dwg_geojson_LWPOLYLINE (Bit_Chain *restrict dat, Dwg_Object *restrict obj, int i
       GEOMETRY (LineString)
       KEY (coordinates);
       ARRAY;
-      last_j = _obj->num_points - 1;
-      for (j = 0; j < last_j; j++)
-        VALUE_2DPOINT (pts[j].x, pts[j].y);
-      LASTVALUE_2DPOINT (pts[last_j].x, pts[last_j].y);
+      if (pts) {
+        last_j = _obj->num_points - 1;
+        for (j = 0; j < last_j; j++)
+          VALUE_2DPOINT (pts[j].x, pts[j].y);
+        LASTVALUE_2DPOINT (pts[last_j].x, pts[last_j].y);
+      }
       LASTENDARRAY;
     }
   ENDGEOMETRY;
