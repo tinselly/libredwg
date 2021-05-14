@@ -15,6 +15,7 @@ api_process (dwg_object *obj)
   CHK_ENTITY_TYPE_W_OLD (region, REGION, version, BS);
   CHK_ENTITY_TYPE (region, REGION, num_blocks, BL);
   CHK_ENTITY_TYPE (region, REGION, acis_data, TV);
+#ifdef USE_DEPRECATED_API
   if ((acis_data
        && strcmp ((char *)dwg_ent_region_get_acis_data (region, &error),
                   (char *)acis_data))
@@ -22,6 +23,7 @@ api_process (dwg_object *obj)
     {
       fail ("old API dwg_ent_region_get_acis_data");
     }
+#endif
 
   CHK_ENTITY_TYPE_W_OLD (region, REGION, wireframe_data_present, B);
   CHK_ENTITY_TYPE_W_OLD (region, REGION, point_present, B);
@@ -31,19 +33,20 @@ api_process (dwg_object *obj)
   CHK_ENTITY_TYPE_W_OLD (region, REGION, num_wires, BL);
   CHK_ENTITY_TYPE_W_OLD (region, REGION, num_silhouettes, BL);
 
+#ifdef USE_DEPRECATED_API
   wires = dwg_ent_region_get_wires (region, &error);
+#else
+  wires = region->wires;
+  error = 0;
+#endif
   if (!error)
     {
       for (i = 0; i < num_wires; i++)
         {
           CHK_SUBCLASS_TYPE (wires[i], 3DSOLID_wire, type, RC);
-          CHK_SUBCLASS_TYPE (wires[i], 3DSOLID_wire, selection_marker, BL);
-          PRE (R_2004) {
-            CHK_SUBCLASS_TYPE (wires[i], 3DSOLID_wire, color, BS);
-          } else {
-            CHK_SUBCLASS_TYPE (wires[i], 3DSOLID_wire, color, BL);
-          }
-          CHK_SUBCLASS_TYPE (wires[i], 3DSOLID_wire, acis_index, BL);
+          CHK_SUBCLASS_TYPE (wires[i], 3DSOLID_wire, selection_marker, BLd);
+          CHK_SUBCLASS_TYPE (wires[i], 3DSOLID_wire, color, BL);
+          CHK_SUBCLASS_TYPE (wires[i], 3DSOLID_wire, acis_index, BLd);
           CHK_SUBCLASS_TYPE (wires[i], 3DSOLID_wire, num_points, BL);
           CHK_SUBCLASS_3DPOINTS (wires[i], 3DSOLID_wire, points, wires[i].num_points);
           CHK_SUBCLASS_TYPE (wires[i], 3DSOLID_wire, transform_present, B);
@@ -59,12 +62,18 @@ api_process (dwg_object *obj)
               CHK_SUBCLASS_TYPE (wires[i], 3DSOLID_wire, has_shear, B);
             }
         }
+#ifdef USE_DEPRECATED_API
       free (wires);
+#endif
     }
   else
     fail ("dwg_ent_region_get_wires");
 
+#ifdef USE_DEPRECATED_API
   silhouettes = dwg_ent_region_get_silhouettes (region, &error);
+#else
+  silhouettes = region->silhouettes;
+#endif
   if (!error)
     {
       for (i = 0; i < num_silhouettes; i++)
@@ -82,13 +91,9 @@ api_process (dwg_object *obj)
               for (unsigned j = 0; j < silhouettes[i].num_wires; j++)
                 {
                   CHK_SUBCLASS_TYPE (wires[j], 3DSOLID_wire, type, RC);
-                  CHK_SUBCLASS_TYPE (wires[j], 3DSOLID_wire, selection_marker, BL);
-                  PRE (R_2004) {
-                    CHK_SUBCLASS_TYPE (wires[i], 3DSOLID_wire, color, BS);
-                  } else {
-                    CHK_SUBCLASS_TYPE (wires[i], 3DSOLID_wire, color, BL);
-                  }
-                  CHK_SUBCLASS_TYPE (wires[j], 3DSOLID_wire, acis_index, BL);
+                  CHK_SUBCLASS_TYPE (wires[j], 3DSOLID_wire, selection_marker, BLd);
+                  CHK_SUBCLASS_TYPE (wires[i], 3DSOLID_wire, color, BL);
+                  CHK_SUBCLASS_TYPE (wires[j], 3DSOLID_wire, acis_index, BLd);
                   CHK_SUBCLASS_TYPE (wires[j], 3DSOLID_wire, num_points, BL);
                   CHK_SUBCLASS_3DPOINTS (wires[j], 3DSOLID_wire, points, wires[i].num_points);
                   CHK_SUBCLASS_TYPE (wires[j], 3DSOLID_wire, transform_present, B);
@@ -106,7 +111,9 @@ api_process (dwg_object *obj)
                 }
             }
         }
+#ifdef USE_DEPRECATED_API
       free (silhouettes);
+#endif
     }
   else
     fail ("dwg_ent_body_get_silhouettes");

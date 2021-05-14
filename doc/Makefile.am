@@ -1,6 +1,6 @@
 ## Makefile.am
 ##
-## Copyright (C) 2010-2020 Free Software Foundation, Inc.
+## Copyright (C) 2010-2021 Free Software Foundation, Inc.
 ##
 ## This file is part of LibreDWG.
 ##
@@ -24,8 +24,9 @@ info_TEXINFOS = LibreDWG.texi
 LibreDWG_TEXINFOS = fdl.texi dynapi.texi
 
 if HAVE_MAKEINFO
+.PHONY: manual
 manual:
-	../build-aux/gendocs.sh LibreDWG "GNU LibreDWG - Manual"
+	cd $(top_srcdir)/doc && ../build-aux/gendocs.sh LibreDWG "GNU LibreDWG - Manual"
 
 endif
 
@@ -40,7 +41,7 @@ refman doxygen html/index.html: Doxyfile ../include/dwg_api.h ../include/dwg.h .
 refman-pdf: html/index.html
 	$(MAKE) -C latex
 
-CLEANFILES = Doxyfile footer LibreDWG.info LibreDWG.pdf LibreDWG.info-1 LibreDWG.info-2
+CLEANFILES = Doxyfile footer LibreDWG.pdf LibreDWG.info LibreDWG.info-1 LibreDWG.info-2
 all-local: Doxyfile footer
 clean-local:
 	rm -rf $(builddir)/doc/refman
@@ -56,6 +57,6 @@ clean-local:
 	rm -f $(srcdir)/doc/LibreDWG.info-2
 endif
 
-DISTCLEANFILES = LibreDWG.ps LibreDWG.{aux,cp,cps,log,t2p,toc}
+DISTCLEANFILES = LibreDWG.ps LibreDWG.{aux,cp,cps,log,t2p,toc} LibreDWG.info LibreDWG.info-1 LibreDWG.info-2
 distclean-local:
 	-rm -rf manual refman latex

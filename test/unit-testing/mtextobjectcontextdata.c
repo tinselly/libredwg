@@ -1,4 +1,4 @@
-// TODO DEBUGGING
+// unstable
 #define DWG_TYPE DWG_TYPE_MTEXTOBJECTCONTEXTDATA
 #include "common.c"
 
@@ -6,11 +6,11 @@ void
 api_process (dwg_object *obj)
 {
   int error, isnew;
-  BITCODE_BS class_version; /*!< r2010+ =3 */
+  ANNOTSCALEOBJECTCONTEXTDATA_fields;
+  /*BITCODE_BS class_version;
   BITCODE_B is_default;
-  BITCODE_B has_xdic;
-  BITCODE_H scale;
-  BITCODE_BL flag;
+  BITCODE_H scale;*/
+  BITCODE_BL attachment;
   BITCODE_3BD ins_pt;
   BITCODE_3BD x_axis_dir;
   BITCODE_BD rect_height;
@@ -26,16 +26,15 @@ api_process (dwg_object *obj)
   BITCODE_BD *column_heights;
 
   Dwg_Version_Type dwg_version = obj->parent->header.version;
-#ifdef DEBUG_CLASSES
   dwg_obj_mtextobjectcontextdata *_obj = dwg_object_to_MTEXTOBJECTCONTEXTDATA (obj);
+
   // AcDbObjectContextData
   CHK_ENTITY_TYPE (_obj, MTEXTOBJECTCONTEXTDATA, class_version, BS);
   CHK_ENTITY_TYPE (_obj, MTEXTOBJECTCONTEXTDATA, is_default, B);
-  CHK_ENTITY_TYPE (_obj, MTEXTOBJECTCONTEXTDATA, has_xdic, B);
   // AcDbAnnotScaleObjectContextData
   CHK_ENTITY_H (_obj, MTEXTOBJECTCONTEXTDATA, scale);
   // AcDbMTextObjectContextData
-  CHK_ENTITY_TYPE (_obj, MTEXTOBJECTCONTEXTDATA, flag, BL);
+  CHK_ENTITY_TYPE (_obj, MTEXTOBJECTCONTEXTDATA, attachment, BL);
   CHK_ENTITY_3RD  (_obj, MTEXTOBJECTCONTEXTDATA, ins_pt);
   CHK_ENTITY_3RD  (_obj, MTEXTOBJECTCONTEXTDATA, x_axis_dir);
   CHK_ENTITY_TYPE (_obj, MTEXTOBJECTCONTEXTDATA, rect_height, BD);
@@ -52,5 +51,4 @@ api_process (dwg_object *obj)
   CHK_ENTITY_TYPE (_obj, MTEXTOBJECTCONTEXTDATA, flow_reversed, B);
   CHK_ENTITY_VECTOR_TYPE (_obj, MTEXTOBJECTCONTEXTDATA, column_heights,
                           num_column_heights, BD);
-#endif
 }

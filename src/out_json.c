@@ -1,7 +1,7 @@
 /*****************************************************************************/
 /*  LibreDWG - free implementation of the DWG file format                    */
 /*                                                                           */
-/*  Copyright (C) 2018-2020 Free Software Foundation, Inc.                   */
+/*  Copyright (C) 2018-2021 Free Software Foundation, Inc.                   */
 /*                                                                           */
 /*  This library is free software, licensed under the terms of the GNU       */
 /*  General Public License as published by the Free Software Foundation,     */
@@ -606,6 +606,19 @@ field_cmc (Bit_Chain *dat, const char *restrict key,
   else                                                                        \
     FIRSTPREFIX                                                               \
   ENDARRAY;
+#define SUB_FIELD_VECTOR_N(o, nam, type, size, dxf)                           \
+  KEY (nam);                                                                  \
+  ARRAY;                                                                      \
+  if (_obj->o.nam)                                                              \
+    {                                                                         \
+      for (vcount = 0; vcount < (BITCODE_BL)size; vcount++)                   \
+        {                                                                     \
+          FIRSTPREFIX fprintf (dat->fh, FORMAT_##type, _obj->o.nam[vcount]);  \
+        }                                                                     \
+    }                                                                         \
+  else                                                                        \
+    FIRSTPREFIX                                                               \
+  ENDARRAY;
 #define FIELD_VECTOR_T(nam, type, size, dxf)                                  \
   KEY (nam);                                                                  \
   ARRAY;                                                                      \
@@ -675,6 +688,7 @@ field_cmc (Bit_Chain *dat, const char *restrict key,
   FIELD_VECTOR_N(nam, type, size, dxf)
 
 #define FIELD_2RD_VECTOR(nam, size, dxf)                                      \
+  if (_obj->nam)                                                              \
   {                                                                           \
     KEY (nam);                                                                \
     ARRAY;                                                                    \
@@ -686,6 +700,7 @@ field_cmc (Bit_Chain *dat, const char *restrict key,
   }
 
 #define FIELD_2DD_VECTOR(nam, size, dxf)                                      \
+  if (_obj->nam)                                                              \
   {                                                                           \
     KEY (nam);                                                                \
     ARRAY;                                                                    \
@@ -697,6 +712,7 @@ field_cmc (Bit_Chain *dat, const char *restrict key,
   }
 
 #define FIELD_3DPOINT_VECTOR(nam, size, dxf)                                  \
+  if (_obj->nam)                                                              \
   {                                                                           \
     KEY (nam);                                                                \
     ARRAY;                                                                    \
@@ -708,6 +724,7 @@ field_cmc (Bit_Chain *dat, const char *restrict key,
   }
 
 #define HANDLE_VECTOR_N(nam, size, code, dxf)                                 \
+  if (_obj->nam)                                                              \
   {                                                                           \
     KEY (nam);                                                                \
     ARRAY;                                                                    \
@@ -977,14 +994,14 @@ json_eed (Bit_Chain *restrict dat,
           switch (data->code)
             {
             case 0:
-              if (!(IS_FROM_TU (dat)))
+              if (!data->u.eed_0.is_tu)
                 VALUE_TEXT (data->u.eed_0.string)
               else {
                 VALUE_TEXT_TU (data->u.eed_0_r2007.string);
               }
               break;
-            case 2: VALUE_RC (data->u.eed_2.byte, 0); break;
-            case 3: VALUE_RL (data->u.eed_3.layer, 0); break;
+            case 2: VALUE_RC (data->u.eed_2.close, 0); break;
+            case 3: VALUE_RLL (data->u.eed_3.layer, 0); break;
             case 4: VALUE_BINARY (data->u.eed_4.data, data->u.eed_4.length, 0); break;
             case 5: fprintf (dat->fh, FORMAT_H "", 5, data->u.eed_5.entity); break;
             case 10:
@@ -1026,13 +1043,17 @@ json_xdata (Bit_Chain *restrict dat, const Dwg_Object_XRECORD *restrict obj)
       switch (type)
         {
         case DWG_VT_STRING:
-          if (!(IS_FROM_TU (dat)))
-            VALUE_TEXT (rbuf->value.str.u.data)
-          else {
-            VALUE_TEXT_TU (rbuf->value.str.u.data);
-          }
-          LOG_TRACE ("xdata[%u]: \"%s\" [TV %d]\n", i, rbuf->value.str.u.data,
-                     rbuf->type);
+          if (!rbuf->value.str.is_tu)
+            {
+              VALUE_TEXT (rbuf->value.str.u.data);
+              LOG_TRACE ("xdata[%u]: \"%s\" [TV %d]\n", i, rbuf->value.str.u.data,
+                         rbuf->type);
+            }
+          else
+            {
+              VALUE_TEXT_TU (rbuf->value.str.u.data);
+              LOG_TRACE_TU ("xdata", rbuf->value.str.u.data, rbuf->type);
+            }
           break;
         case DWG_VT_BINARY:
           VALUE_BINARY (rbuf->value.str.u.data, rbuf->value.str.size, 0);
@@ -1150,8 +1171,21 @@ print_wcquote (Bit_Chain *restrict dat, dwg_wchar_t *restrict wstr)
       return;
     }
   fprintf (dat->fh, "\"");
-  while ((c = *ws++))
+  while (1)
     {
+#ifdef HAVE_ALIGNED_ACCESS_REQUIRED
+      // for strict alignment CPU's like sparc only. also for UBSAN.
+      if ((uintptr_t)wstr % SIZEOF_SIZE_T)
+        {
+          unsigned char *b = (unsigned char *)ws;
+          c = TU_to_int(b);
+          ws++;
+        }
+      else
+#endif
+        c = *ws++;
+      if (!c)
+        break;
       if (c == L'"')
         {
           fprintf (dat->fh, "\\\"");

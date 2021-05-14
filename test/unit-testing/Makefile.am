@@ -19,7 +19,8 @@
 
 WARN_CFLAGS = @WARN_CFLAGS@
 AM_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/src $(WARN_CFLAGS)
-LDADD     = $(top_builddir)/src/libredwg.la \
+LDADD = $(top_builddir)/src/libredwg.la \
+	$(top_builddir)/src/objects.lo \
 	$(top_builddir)/src/classes.lo
 
 bits_test_LDADD = $(LDADD) \
@@ -50,6 +51,7 @@ testobjects = \
 	acsh_cone_class \
 	acsh_cylinder_class \
 	acsh_fillet_class \
+	acsh_history_class \
 	acsh_pyramid_class \
 	acsh_torus_class \
 	acsh_wedge_class \
@@ -58,12 +60,19 @@ testobjects = \
 	appid_control \
 	arc \
 	arc_dimension \
+	aldimobjectcontextdata \
+	blkrefobjectcontextdata \
+	fcfobjectcontextdata \
+	leaderobjectcontextdata \
+	mtextobjectcontextdata \
+	textobjectcontextdata \
 	assocaction \
 	assocnetwork \
 	assocdependency \
 	assocgeomdependency \
 	assocvaluedependency \
 	assocblendsurfaceactionbody \
+	assocdimdependencybody \
 	assocextendsurfaceactionbody \
 	assocextrudedsurfaceactionbody \
 	assocfilletsurfaceactionbody \
@@ -76,11 +85,18 @@ testobjects = \
 	assoctrimsurfaceactionbody \
 	attdef \
 	attrib \
-	background \
+	skylight_background \
+	solid_background \
+	ibl_background \
+	image_background \
+	gradient_background \
+	ground_plane_background \
 	block \
 	block_control \
 	block_header \
 	blockgriplocationcomponent \
+	blockalignmentgrip \
+	blockalignmentparameter \
 	blockbasepointparameter \
 	blockflipaction \
 	blockflipparameter \
@@ -89,15 +105,19 @@ testobjects = \
 	blocklineargrip \
 	blocklookupgrip \
 	blockmoveaction \
+	blockpolargrip \
+	blockpolarparameter \
+	blockrotationgrip \
 	blockscaleaction \
 	blockrotationparameter \
-	blockxyparameter \
 	blockvisibilitygrip \
 	blockvisibilityparameter \
+	blockxyparameter \
 	body \
 	camera \
 	cellstylemap \
 	circle \
+	datalink \
 	dbcolor \
 	dictionary \
 	dictionaryvar \
@@ -113,8 +133,10 @@ testobjects = \
 	dimstyle_control \
 	dummy \
 	dynamicblockpurgepreventer \
+	blockrepresentation \
 	ellipse \
 	endblk \
+	evaluation_graph \
 	field \
 	fieldlist \
 	geodata \
@@ -153,18 +175,29 @@ testobjects = \
 	ole2frame \
 	oleframe \
 	placeholder \
+	planesurface \
 	plotsettings \
 	point \
 	polyline_2d \
 	polyline_3d \
 	polyline_mesh \
 	polyline_pface \
+	pointcloud \
+	pointcloudex \
+	pointclouddef \
+	pointclouddefex \
+	pointclouddef_reactor \
+	pointclouddef_reactor_ex \
+	pointcloudcolormap \
 	proxy_entity \
 	proxy_object \
 	rapidrtrendersettings \
 	rastervariables \
 	ray \
 	region \
+	renderentry \
+	renderenvironment \
+	renderglobal \
 	rendersettings \
 	scale \
 	section_manager \
@@ -189,8 +222,12 @@ testobjects = \
 	trace \
 	ucs \
 	ucs_control \
-	underlay \
-	underlaydefinition \
+	pdfunderlay \
+	pdfdefinition \
+	dgnunderlay \
+	dgndefinition \
+	dwfunderlay \
+	dwfdefinition \
 	unknown_ent \
 	unknown_obj \
 	vba_project \
@@ -210,7 +247,40 @@ testobjects = \
 	wipeout \
 	wipeoutvariables \
 	xline \
-	xrecord
+	xrecord \
+	assoc2dconstraintgroup \
+	assocvariable \
+	assocarrayactionbody \
+	assocactionparam \
+	assocarraymodifyparameters \
+	assocarraypathparameters \
+	assocarraypolarparameters \
+	assocarrayrectangularparameters \
+	assocasmbodyactionparam \
+	assoccompoundactionparam \
+	assocfaceactionparam \
+	assocobjectactionparam \
+	assocpathactionparam \
+	assocpointrefactionparam \
+	assocvertexactionparam \
+	assocosnappointrefactionparam \
+	blockparamdependencybody \
+	blockalignedconstraintparameter \
+	blockangularconstraintparameter \
+	blockarrayaction \
+	blockdiametricconstraintparameter \
+	blockhorizontalconstraintparameter \
+	blocklinearconstraintparameter \
+	blockradialconstraintparameter \
+	blockverticalconstraintparameter \
+	blocklookupaction \
+	blocklookupparameter \
+	blockpointparameter \
+	blockpolarstretchaction \
+	blockrotateaction \
+	blockstretchaction \
+	blockuserparameter \
+	blockxygrip
 
 # NB: After you modify this list, do "make update-ignorance"
 #     and include this directory's .gitignore in the commit.
@@ -220,17 +290,14 @@ testdebug = \
 	acmescope \
 	acmestatemgr \
 	acsh_extrusion_class \
-	acsh_history_class \
 	acsh_loft_class \
 	acsh_revolve_class \
 	acsh_sweep_class \
-	aldimobjectcontextdata \
 	angdimobjectcontextdata \
 	annotscaleobjectcontextdata \
-	assoc2dconstraintgroup \
-	assocmleaderactionbody \
-	assocarrayactionbody \
+	arcalignedtext \
 	assocarraymodifyactionbody \
+	assocmleaderactionbody \
 	assocedgechamferactionbody \
 	assocedgefilletactionbody \
 	assocrestoreentitystateactionbody \
@@ -240,101 +307,46 @@ testdebug = \
 	assocrotateddimactionbody \
 	assocsweptsurfaceactionbody \
 	assocperssubentmanager \
-	assocvariable \
-	assocactionparam \
-	assocosnappointrefactionparam \
-	assocasmbodyactionparam \
 	assocedgeactionparam \
-	assoccompoundactionparam \
-	assocfaceactionparam \
-	assocobjectactionparam \
-	assocpathactionparam \
-	assocpointrefactionparam \
-	assocvertexactionparam \
-	assocarraymodifyparameters \
-	assocarraypathparameters \
-	assocarraypolarparameters \
-	assocarrayrectangularparameters \
-	atext \
-	blkrefobjectcontextdata \
-	assocdimdependencybody \
-	blockparamdependencybody \
 	contextdatamanager \
 	csacdocumentoptions \
 	curvepath \
-	datalink \
 	datatable \
 	dmdimobjectcontextdata \
 	dimassoc \
-	evaluation_graph \
 	extrudedsurface \
-	fcfobjectcontextdata \
 	geomapimage \
 	geopositionmarker \
 	helix \
 	layoutprintconfig \
-	leaderobjectcontextdata \
 	loftedsurface \
 	mleaderobjectcontextdata \
 	motionpath \
 	mpolygon \
 	mtextattributeobjectcontextdata \
-	mtextobjectcontextdata \
 	navisworksmodel \
 	navisworksmodeldef \
 	nurbsurface \
 	orddimobjectcontextdata \
+	partial_viewing_index \
 	persubentmgr \
-	planesurface \
-	pointcloud \
-	pointcloudex \
-	pointclouddef \
-	pointclouddefex \
-	pointclouddef_reactor \
-	pointclouddef_reactor_ex \
-	pointcloudcolormap \
 	pointpath \
+	polargripentity \
 	radimobjectcontextdata \
 	radimlgobjectcontextdata \
-	renderenvironment \
-	renderentry \
-	renderglobal \
 	revolvedsurface \
 	rtext \
 	sunstudy \
 	sweptsurface \
 	table \
 	tablecontent \
-	textobjectcontextdata \
 	tvdeviceproperties \
 	visibilityparameterentity \
 	visibilitygripentity \
 	alignmentparameterentity \
 	basepointparameterentity \
-	blockalignedconstraintparameter \
-	blockalignmentgrip \
-	blockalignmentparameter \
-	blockangularconstraintparameter \
-	blockarrayaction \
-	blockdiametricconstraintparameter \
-	blockhorizontalconstraintparameter \
-	blocklinearconstraintparameter \
-	blocklookupaction \
-	blocklookupparameter \
-	blockpointparameter \
-	blockpolargrip \
-	blockpolarparameter \
-	blockpolarstretchaction \
 	blockpropertiestable \
 	blockpropertiestablegrip \
-	blockradialconstraintparameter \
-	blockrepresentation \
-	blockrotateaction \
-	blockrotationgrip \
-	blockstretchaction \
-	blockuserparameter \
-	blockverticalconstraintparameter \
-	blockxygrip \
 	dynamicblockproxynode \
 	flipparameterentity \
 	linearparameterentity \
@@ -352,6 +364,9 @@ check_minimal = \
 	hash_test \
 	dynapi_test \
 	dxf_test
+if USE_WRITE
+check_minimal += add_test
+endif
 
 check_PROGRAMS = \
 	$(check_minimal) \
@@ -379,9 +394,9 @@ TESTS_ENVIRONMENT = \
   ASAN_OPTIONS="detect_leaks=0"
 
 check-minimal: $(check_minimal)
-	$(MAKE) check TESTS="$(check_minimal)"
+	$(MAKE) check check_PROGRAMS="$(check_minimal)"
 check-debug: $(testdebug)
-	$(MAKE) check TESTS="$(testdebug)"
+	$(MAKE) check check_PROGRAMS="$(testdebug)"
 
 bits_test.cbmc: bits_test.c $(top_srcdir)/src/bits.c
 	cbmc -I. -I$(top_srcdir)/include -I/opt/local/include \
@@ -416,7 +431,7 @@ AM_CFLAGS += @GCOV_CFLAGS@
 LIBS      += @GCOV_LIBS@
 gcov: $(check_PROGRAMS) check
 	-test -f gcov.log && rm gcov.log
-	$(GCOV) *.gcno | tee -a $(builddir)/gcov.log
+	$(GCOV) -lp *.gcno | tee -a $(builddir)/gcov.log
 
 CLEANFILES  += *.gcov *.gcno *.gcda gcov.log
 endif

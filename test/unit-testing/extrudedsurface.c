@@ -60,7 +60,7 @@ api_process (dwg_object *obj)
   else
     {
       for (BITCODE_BL i = 0; i < num_wires; i++)
-        printf ("EXTRUDEDSURFACE.wires[%u]: " FORMAT_BL "\n", i, wires[i].selection_marker);
+        printf ("EXTRUDEDSURFACE.wires[%u]: " FORMAT_BLd "\n", i, wires[i].selection_marker);
     }
   if (!dwg_dynapi_entity_value (_obj, "EXTRUDEDSURFACE", "silhouettes", &silhouettes, NULL))
     fail ("EXTRUDEDSURFACE.silhouettes");
@@ -83,7 +83,8 @@ api_process (dwg_object *obj)
 
   //CHK_ENTITY_TYPE (_obj, EXTRUDEDSURFACE, height, BD);
   CHK_ENTITY_3RD (_obj, EXTRUDEDSURFACE, sweep_vector);
-  if (!dwg_dynapi_entity_value (_obj, "EXTRUDEDSURFACE", "sweep_transmatrix", &sweep_transmatrix, NULL))
+  if (!dwg_dynapi_entity_value (_obj, "EXTRUDEDSURFACE", "sweep_transmatrix", &sweep_transmatrix, NULL)
+      || !sweep_transmatrix)
     fail ("EXTRUDEDSURFACE.sweep_transmatrix");
   else
     for (int i = 0; i < 16; i++)
@@ -98,7 +99,8 @@ api_process (dwg_object *obj)
   CHK_ENTITY_TYPE (_obj, EXTRUDEDSURFACE, align_angle, BD);
   if (!dwg_dynapi_entity_value (_obj, "EXTRUDEDSURFACE",
                                 "sweep_entity_transmatrix",
-                                &sweep_entity_transmatrix, NULL))
+                                &sweep_entity_transmatrix, NULL)
+      || !sweep_entity_transmatrix)
     fail ("EXTRUDEDSURFACE.sweep_entity_transmatrix");
   else
     for (int i = 0; i < 16; i++)
@@ -108,7 +110,8 @@ api_process (dwg_object *obj)
       }
   if (!dwg_dynapi_entity_value (_obj, "EXTRUDEDSURFACE",
                                 "path_entity_transmatrix",
-                                &path_entity_transmatrix, NULL))
+                                &path_entity_transmatrix, NULL)
+      || !path_entity_transmatrix)
     fail ("EXTRUDEDSURFACE.path_entity_transmatrix");
   else
     for (int i = 0; i < 16; i++)

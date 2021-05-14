@@ -16,7 +16,7 @@ api_process (dwg_object *obj)
   BITCODE_B b280;
 
   Dwg_Version_Type dwg_version = obj->parent->header.version;
-#ifdef DEBUG_CLASSES
+  //#ifdef DEBUG_CLASSES
   dwg_obj_blocklookupaction *_obj = dwg_object_to_BLOCKLOOKUPACTION (obj);
 
   // AcDbBlockAction
@@ -28,6 +28,11 @@ api_process (dwg_object *obj)
   // AcDbBlockLookupAction
   CHK_ENTITY_TYPE (_obj, BLOCKLOOKUPACTION, numrows, BL);
   CHK_ENTITY_TYPE (_obj, BLOCKLOOKUPACTION, numcols, BL);
+  if (!_obj->lut)
+    {
+      fail ("BLOCKLOOKUPACTION.lut[]: NULL");
+      return;
+    }
   for (i = 0; i < numrows * numcols; i++) {
     for (int j = 0; j < 3; j++)
       {
@@ -39,5 +44,5 @@ api_process (dwg_object *obj)
   }
   CHK_ENTITY_TYPE (_obj, BLOCKLOOKUPACTION, b280, B);
   // ..
-#endif
+  //#endif
 }

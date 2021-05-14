@@ -1,6 +1,6 @@
 ## Makefile.am
 ##
-## Copyright (C) 2010-2020 Free Software Foundation, Inc.
+## Copyright (C) 2010-2021 Free Software Foundation, Inc.
 ##
 ## This file is part of LibreDWG.
 ##
@@ -57,7 +57,7 @@ EXTRA_DIST = $(top_srcdir)/.version libredwg.spec Dockerfile \
 
 .PHONY: check-dwg check-dxf check-json check-dwg-valgrind \
         regen-man man manual refman scan-build gcov \
-	unknown regen-unknown full-regen-unknown
+	unknown regen-unknown full-regen-unknown regen-gperf regen-dynapi
 
 dist-hook:
 	echo dist-hook distdir="$(distdir)"
@@ -100,6 +100,9 @@ endif
 
 regen-dynapi: $(srcdir)/src/gen-dynapi.pl $(srcdir)/include/dwg.h
 	-$(PERL) $(srcdir)/src/gen-dynapi.pl
+# $(MAKE) -C src $(abs_top_srcdir)/src/dxfclasses.c
+regen-gperf:
+	-$(GPERF) --output-file src/dxfclasses.c src/dxfclasses.in
 regen-unknown:
 	$(MAKE) -C examples $@
 full-regen-unknown:
@@ -116,6 +119,17 @@ regen-swig-patch:
 	$(MAKE) -C bindings/python
 	-difforig bindings/python/swig_python.c >xxxx
 	if test -s xxxx; then mv xxxx build-aux/swig_python.patch; fi
+
+WEB_DIR = $(srcdir)/../libredwg-web
+release-web: manual refman
+	if test -d $(WEB_DIR)/manual; then \
+	  rsync -avzC $(srcdir)/doc/manual/* $(WEB_DIR)/manual/; \
+	  rsync -avzC doc/refman/* $(WEB_DIR)/refman/; \
+	fi
+	-cd $(WEB_DIR) && \
+	  cvs add -m"new with $(VERSION)" manual/index.html manual/LibreDWG.* manual/html_node/*.html \
+	    refman/*.{html,js,png} refman/search/*.{html,js}; cd -
+	-cd $(WEB_DIR); cvs commit -m"update to $(VERSION)"; cd -
 
 TESTS =
 if HAVE_SHELLCHECK
@@ -211,8 +225,13 @@ gcov: check
 	$(MAKE) -C src gcov
 	$(MAKE) -C programs gcov
 	$(MAKE) -C examples gcov
+cover: gcov
 	gcov2perl test/*/*.gcov src/*.gcov programs/*.gcov examples/*.gcov
 	cover -no-gcov
+codecov: check
+	build-aux/codecov_io.sh -X test -X bindings
+coveralls: gcov
+	coveralls -e test -e bindings
 endif
 
 $(BUILT_SOURCES):
@@ -221,6 +240,9 @@ $(BUILT_SOURCES):
 CLEANFILES = check-dwg.log check-dwg-valgrind.log check-dxf.log \
              check-dwg.log~ check-dwg-valgrind.log~ check-dxf.log~ \
 	     *_20*.dxf *_r1*.dxf example_*.dxf.log
+if ENABLE_GCOV
+CLEANFILES += codecov_io.sh *.gcov
+endif
 DISTCLEANFILES  = logs-all.sh dynapi_test_all.sh unit_testing_all.sh log json dwg dxf svg rw libredwg.pc
 MAINTAINERCLEANFILES  = *~ *.log *.dxf *.json *.dwg cover_db .analysis
 

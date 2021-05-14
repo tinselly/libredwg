@@ -347,15 +347,15 @@ match_TEXT (const char *restrict filename, const Dwg_Object *restrict obj)
 }
 
 static int
-match_ATEXT (const char *restrict filename, const Dwg_Object *restrict obj)
+match_ARCALIGNEDTEXT (const char *restrict filename, const Dwg_Object *restrict obj)
 {
   char *text;
   int found = 0;
-  MATCH_ENTITY (ATEXT, text_value, 1);
+  MATCH_ENTITY (ARCALIGNEDTEXT, text_value, 1);
   if (!opt_text)
     {
       // ignore the various sizes stored as text
-      MATCH_ENTITY (ATEXT, style, 7);
+      MATCH_ENTITY (ARCALIGNEDTEXT, style, 7);
     }
   return found;
 }
@@ -825,10 +825,10 @@ match_UNDERLAYDEFINITION (const char *restrict filename,
 {
   char *text;
   int found = 0;
-  //const Dwg_Object_UNDERLAYDEFINITION *_obj = obj->tio.object->tio.UNDERLAYDEFINITION;
+  //const Dwg_Object_PDFDEFINITION *_obj = obj->tio.object->tio.PDFDEFINITION;
 
-  MATCH_OBJECT (UNDERLAYDEFINITION, filename, 1);
-  MATCH_OBJECT (UNDERLAYDEFINITION, name, 2);
+  MATCH_OBJECT (PDFDEFINITION, filename, 1);
+  MATCH_OBJECT (PDFDEFINITION, name, 2);
   return found;
 }
 
@@ -1549,7 +1549,12 @@ match_OBJECTS (const char *restrict filename, Dwg_Data *restrict dwg)
       ELSEMATCH (FIELD)
       ELSEMATCH (TABLECONTENT)
       ELSEMATCH (GEODATA)
-      ELSEMATCH (UNDERLAYDEFINITION)
+      else if (obj->fixedtype == DWG_TYPE_PDFDEFINITION)
+        found += match_UNDERLAYDEFINITION (filename, obj);
+      else if (obj->fixedtype == DWG_TYPE_DGNDEFINITION)
+        found += match_UNDERLAYDEFINITION (filename, obj);
+      else if (obj->fixedtype == DWG_TYPE_DWFDEFINITION)
+        found += match_UNDERLAYDEFINITION (filename, obj);
       ELSEMATCH (VISUALSTYLE)
       ELSEMATCH (TABLESTYLE)
       ELSEMATCH (SUNSTUDY)
@@ -1650,7 +1655,7 @@ match_BLOCK_HEADER (const char *restrict filename,
 #endif
       ELSEMATCH (ATTDEF)
       ELSEMATCH (MTEXT)
-      ELSEMATCH (ATEXT)
+      ELSEMATCH (ARCALIGNEDTEXT)
       else if (obj->type == DWG_TYPE_INSERT)
         {
 #ifndef WITH_SUBENTS
@@ -1911,7 +1916,7 @@ main (int argc, char *argv[])
 
 #  ifdef HAVE_PCRE2_16
   pcre2_config_16 (PCRE2_CONFIG_JIT, &have_jit);
-  pattern16 = bit_utf8_to_TU (pattern);
+  pattern16 = bit_utf8_to_TU (pattern, 0);
   ri16 = pcre2_compile_16 ((PCRE2_SPTR16)pattern16, plen, /* pattern */
                            options,                       /* options */
                            &errcode,                      /* errors */

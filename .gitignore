@@ -101,6 +101,7 @@ compile_commands.json
 
 # specific filenames
 /.rb.sh
+/.rb-*.sh
 /.upwork.sh
 /.version
 /.tarball-version
@@ -110,7 +111,6 @@ compile_commands.json
 /.patches
 /.analysis
 /.lbwork.sh
-/.rb-fail.sh
 /.upall.sh
 /GPATH
 /GRTAGS
@@ -218,3 +218,4 @@ compile_commands.json
 /src/free.h.bak
 /include/dwg.h.bak
 /include/dwg_api.h.bak
+/minisign.pub

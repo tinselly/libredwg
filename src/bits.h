@@ -1,7 +1,7 @@
 /*****************************************************************************/
 /*  LibreDWG - free implementation of the DWG file format                    */
 /*                                                                           */
-/*  Copyright (C) 2009-2020 Free Software Foundation, Inc.                   */
+/*  Copyright (C) 2009-2021 Free Software Foundation, Inc.                   */
 /*                                                                           */
 /*  This library is free software, licensed under the terms of the GNU       */
 /*  General Public License as published by the Free Software Foundation,     */
@@ -73,7 +73,10 @@ typedef struct _bit_chain
 
 #define EMPTY_CHAIN(size) { NULL, size, 0L, 0, 0, 0, 0, NULL }
 
-#define IS_FROM_TU(dat) dat->from_version >= R_2007 && !(dat->opts & DWG_OPTS_IN)
+// only if from r2007+ DWG, not JSON, DXF, add API
+#define IS_FROM_TU(dat) (dat->from_version >= R_2007) && !(dat->opts & DWG_OPTS_IN)
+#define IS_FROM_TU_DWG(dwg) (dwg->header.from_version >= R_2007) && !(dwg->opts & DWG_OPTS_IN)
+#define TU_to_int(b) ((b[1] << 8) + b[0])
 
 /* Functions for raw data manipulations.
  */
@@ -192,6 +195,7 @@ void normalize_BE (BITCODE_3BD ext);
 
 BITCODE_DD bit_read_DD (Bit_Chain *dat, double default_value);
 BITCODE_BB bit_write_DD (Bit_Chain *dat, double value, double default_value);
+int bit_eq_DD (double value, double default_value);
 
 BITCODE_BT bit_read_BT (Bit_Chain *dat);
 void bit_write_BT (Bit_Chain *dat, double value);
@@ -229,6 +233,7 @@ void bit_write_TV (Bit_Chain *restrict dat, BITCODE_TV restrict value);
 
 /* read UCS-2 string, with length as BS */
 BITCODE_TU bit_read_TU (Bit_Chain *restrict dat);
+BITCODE_TU bit_read_TU_len (Bit_Chain *restrict dat, unsigned int *lenp);
 /* read ASCII string, with length as RS */
 BITCODE_TV bit_read_T16 (Bit_Chain *restrict dat);
 /* read UCS-2 string, with length as RS */
@@ -275,18 +280,25 @@ size_t bit_strnlen (const char *restrict str, const size_t maxlen);
 #define strnlen (str, maxlen) bit_strnlen(str, maxlen)
 #endif
 
-/* Converts UCS-2 to UTF-8, returning a copy. */
-EXPORT char *bit_convert_TU (BITCODE_TU restrict wstr) ATTRIBUTE_MALLOC;
+/* Convert UCS-2LE to UTF-8, returning a copy. */
+EXPORT char *bit_convert_TU (const BITCODE_TU restrict wstr) ATTRIBUTE_MALLOC;
+EXPORT char *bit_TU_to_utf8_len (const BITCODE_TU restrict wstr, const int len)
+  ATTRIBUTE_MALLOC;
+
 
 /** Converts UTF-8 (dxf,json) to ASCII TV.
-    Unquotes \" to ", undo json_cquote(), \uxxxx or other unicode => \U+XXXX
+    \uxxxx or other unicode => \U+XXXX
+    If cquoted unquotes \" to ", undo json_cquote(),
     Returns NULL if not enough room in dest. */
 EXPORT char *
-bit_utf8_to_TV (char *restrict dest, const unsigned char *restrict src, const int len);
+bit_utf8_to_TV (char *restrict dest, const unsigned char *restrict src,
+                const int destlen, const int srclen, const unsigned cquoted);
 
 /** Converts UTF-8 to UCS-2. Returns a copy.
-    Needed by dwg importers, writers (e.g. dxf2dwg) */
-EXPORT BITCODE_TU bit_utf8_to_TU (char *restrict str) ATTRIBUTE_MALLOC;
+    Needed by dwg importers, writers (e.g. dxf2dwg)
+    cquoted is needed by in_json, to unquote \"
+ */
+EXPORT BITCODE_TU bit_utf8_to_TU (char *restrict str, const unsigned cquoted) ATTRIBUTE_MALLOC;
 
 /* compare an ASCII/TU string to ASCII name */
 int bit_eq_T (Bit_Chain *restrict dat, const BITCODE_T restrict str1, const char *restrict str2);

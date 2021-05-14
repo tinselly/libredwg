@@ -18,8 +18,21 @@
  * modified by Reini Urban
  */
 
-//TODO: GEOLATLONGFORMAT, GEOMARKERVISIBILITY, GEOMARKPOSITIONSIZE
-//      PICKADD, ARRAYASSOCIATIVITY, ARRAYTYPE, DEMANDLOAD, FIELDDISPLAY
+//TODO: (here unknwon_* or in dwg.spec)
+//  GEOLATLONGFORMAT [B] default 0
+//  GEOMARKERVISIBILITY [B] default 1
+//  GEOMARKPOSITIONSIZE (?)
+//  FRAME [0-3] default 3
+//  IMAGEFRAME [0-2] default 1
+//  PDFFRAME [0-2] default 1
+//  ANNOALLVISIBLE [B 0] (per Layout, LAYOUT.layout_flags?)
+//  ANNOTATIVEDWG [B 0]
+//  CTAB [T 0] default: "Model"
+//
+// Computed:
+//  CMLEADERSTYLE [H 0] (via NOD ACAD_MLEADERSTYLE)
+//  CTABLESTYLE [H 0] (via NOD ACAD_TABLESTYLE)
+//  CVPORT [BS 0] default: 2 (current viewport id), via VPORT *Active
 
 #include "spec.h"
 
@@ -38,19 +51,22 @@
         FIELD_VALUE (unknown_2) = 1.0;
         FIELD_VALUE (unknown_3) = 1.0;
       }
-      FIELD_BD (unknown_0, 0);
+      FIELD_BD (unknown_0, 0); // unit conversions. i.e. meter / inch
       FIELD_BD (unknown_1, 0);
       FIELD_BD (unknown_2, 0);
       FIELD_BD (unknown_3, 0);
     }
   VERSIONS (R_13, R_2004) { // undocumented as such in the ODA spec
       IF_ENCODE_FROM_EARLIER_OR_DXF {
-        FIELD_VALUE (unknown_text1) = strdup("m");
+        FIELD_VALUE (unknown_text1) = strdup ("m");
       }
       FIELD_TV (unknown_text1, 0);
       FIELD_TV (unknown_text2, 0);
       FIELD_TV (unknown_text3, 0);
       FIELD_TV (unknown_text4, 0);
+  }
+  FREE {
+    FIELD_TV (unknown_text1, 0);
   }
   SINCE (R_13)
     {
@@ -190,7 +206,7 @@
   FIELD_BS (UNITMODE, 70);
   FIELD_BS (MAXACTVP, 70); // default: 64
   FIELD_BS (ISOLINES, 70);
-  FIELD_BS (CMLJUST, 70);
+  FIELD_BS (CMLJUST, 70); // 0-2
   FIELD_BS (TEXTQLTY, 70);
   FIELD_BD (LTSCALE, 40);
   FIELD_BD (TEXTSIZE, 40);
@@ -496,7 +512,7 @@
       }
       FIELD_HANDLE (DICTIONARY_LAYOUT, 5, 0);
       FIELD_HANDLE (DICTIONARY_PLOTSETTINGS, 5, 0);
-      FIELD_HANDLE (DICTIONARY_PLOTSTYLENAME, 5, 0);
+      FIELD_HANDLE (DICTIONARY_PLOTSTYLENAME, 5, 0); // should be CPLOTSTYLE
     }
 
   SINCE (R_2004)
@@ -516,10 +532,16 @@
     }
   SINCE (R_2000)
     {
+      ENCODER {
+        // unneeded here. done in in_dxf.c:1189
+        FIELD_VALUE (FLAGS) |= dxf_revcvt_lweight (FIELD_VALUE (CELWEIGHT));
+        if (FIELD_VALUE (ENDCAPS)) FIELD_VALUE (FLAGS) |= 0x60;
+        // ...
+      }
       FIELD_BLx (FLAGS, 70);
       DECODER {
-          FIELD_VALUE (CELWEIGHT) = FIELD_VALUE (FLAGS) & 0x1f;
-          FIELD_G_TRACE (CELWEIGHT, BSd, 370)
+          FIELD_VALUE (CELWEIGHT) = dxf_cvt_lweight (FIELD_VALUE (FLAGS) & 0x1f);
+          FIELD_G_TRACE (CELWEIGHT, BSd, 370) // default: -1 ByLayer
           FIELD_VALUE (ENDCAPS)   = FIELD_VALUE (FLAGS) & 0x60 ? 1 : 0;
           FIELD_G_TRACE (ENDCAPS, RC, 280)
           FIELD_VALUE (JOINSTYLE) = FIELD_VALUE (FLAGS) & 0x180 ? 1 : 0;
@@ -535,7 +557,7 @@
           FIELD_VALUE (OLESTARTUP) = FIELD_VALUE (FLAGS) & 0x4000 ? 1 : 0;
           FIELD_G_TRACE (OLESTARTUP, B, 290)
       }
-      FIELD_BS (INSUNITS, 70);
+      FIELD_BS (INSUNITS, 70); // 0-20. default: 1 with imperial, 4 with metric
       FIELD_BS (CEPSNTYPE, 70);
       if (FIELD_VALUE (CEPSNTYPE) == 3)
         {
@@ -622,10 +644,10 @@
       FIELD_RC (DGNFRAME, 280);
       FIELD_B (REALWORLDSCALE, 290);
       FIELD_CMC (INTERFERECOLOR, 62);
-      FIELD_HANDLE (INTERFEREOBJVS, 5, 345);
-      FIELD_HANDLE (INTERFEREVPVS, 5, 346);
-      FIELD_HANDLE (DRAGVS, 5, 349);
-      FIELD_RC (CSHADOW, 280);
+      FIELD_HANDLE (INTERFEREOBJVS, 5, 345); // VISUALSTYLE
+      FIELD_HANDLE (INTERFEREVPVS, 5, 346); // VISUALSTYLE
+      FIELD_HANDLE (DRAGVS, 5, 349); // VISUALSTYLE
+      FIELD_RC (CSHADOW, 280); // [0-3]
       FIELD_BD (SHADOWPLANELOCATION, 40); // z height
     }
 
@@ -648,8 +670,8 @@
     FIELD_T (DIMPOST, 1);
     FIELD_T (DIMAPOST, 1);
     SINCE (R_2010) {
-      FIELD_T (DIMALTMZS, 70);
-      FIELD_T (DIMMZS, 70);
+      FIELD_T (DIMALTMZS, 1);
+      FIELD_T (DIMMZS, 1);
     }
     FIELD_T (HYPERLINKBASE, 1); // see SummaryInfo
     FIELD_T (STYLESHEET, 1);

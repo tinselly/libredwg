@@ -252,6 +252,9 @@
         }                                                                     \
     }
 #endif
+#ifndef FIELD_VECTOR_T1
+#  define FIELD_VECTOR_T1(nam, type, size, dxf) FIELD_VECTOR_T(nam, type, size, dxf)
+#endif
 #ifndef SUB_FIELD_VECTOR_TYPESIZE
 #  define SUB_FIELD_VECTOR_TYPESIZE(o, nam, size, typesize, dxf)              \
   if (_obj->o.size && _obj->o.nam)                                            \
@@ -367,10 +370,14 @@
 #  define FIELD_RL0(name, dxf) FIELD_RL (name, dxf)
 #  define FIELD_BT0(name, dxf) FIELD_BT (name, dxf)
 #  define VALUE_T0(name, dxf) VALUE_T (name, dxf)
+#  define FIELD_TV0(name, dxf) FIELD_TV (name, dxf)
 #  define FIELD_T0(name, dxf) FIELD_T (name, dxf)
 #  define FIELD_CMC0(color, dxf) FIELD_CMC (color, dxf)
 #  define FIELD_HANDLE0(name, code, dxf) FIELD_HANDLE (name, code, dxf)
 #  define SUB_FIELD_HANDLE0(o, name, code, dxf) SUB_FIELD_HANDLE (o, name, code, dxf)
+#endif
+#ifndef VALUE_TV0
+#  define VALUE_TV0(name, dxf) VALUE_TV (name, dxf)
 #endif
 
 // double to text
@@ -440,12 +447,11 @@
 #  undef SET_PARENT_OBJ
 #  undef SET_PARENT_FIELD
 #  define SET_PARENT(field, to)                                               \
-    if (_obj->field)                                                          \
-      _obj->field->parent = to;
-#  define SET_PARENT_OBJ(field) SET_PARENT (field, _obj);
+    _obj->field.parent = to
+#  define SET_PARENT_OBJ(field)                                               \
+    SET_PARENT (field, _obj)
 #  define SET_PARENT_FIELD(field, what_parent, to)                            \
-    if (_obj->field)                                                          \
-      _obj->field->what_parent = to;
+    _obj->field.what_parent = to
 #else
 #  define TRACE_DD
 #endif
@@ -526,11 +532,11 @@
     {                                                                         \
       if (strcmp (#acdbname, "Layer") == 0)                                   \
         {                                                                     \
-        FIELD_CAST (flag, RC, RS, 70);                                        \
+          FIELD_CAST (flag, RC, RS, 70);                                      \
         }                                                                     \
       else                                                                    \
         {                                                                     \
-          FIELD_RC (flag, 70);                                                \
+          FIELD_CAST (flag, RC, RC, 70);                                      \
         }                                                                     \
       FIELD_TFv (name, 32, 2);                                                \
       FIELD_RS (used, 0);                                                     \
@@ -552,8 +558,8 @@
           FIELD_VALUE (is_xref_dep) = 1;                                      \
       }                                                                       \
       FIELD_HANDLE (xref, 5, 0); /* NULLHDL without is_xref_dep */            \
-      FIELD_VALUE (flag) |= FIELD_VALUE (is_xref_dep) << 4                    \
-                          | FIELD_VALUE (is_xref_ref) << 6;                   \
+      FIELD_VALUE (flag)                                                      \
+          |= FIELD_VALUE (is_xref_dep) << 4 | FIELD_VALUE (is_xref_ref) << 6; \
     }                                                                         \
     RESET_VER
 #endif

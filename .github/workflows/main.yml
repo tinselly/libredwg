@@ -1,0 +1,130 @@
+name: Github CI
+on:
+  push:
+    branches:
+      - master
+      - smoke/*
+      - gh/*
+
+#strategy:
+#  matrix:
+#    os: [ubuntu-14.04, ubuntu-18.04, ubuntu-latest]
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        CONFIGURE_ARGS:
+          - --disable-bindings CFLAGS="-O0 -fno-omit-frame-pointer -fsanitize=address,undefined -fno-var-tracking"
+          - CC="clang"
+          - --enable-release
+          - --enable-gcov --disable-bindings
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 1
+    - name: setup-python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.8
+    - name: setup-python-libxml2
+      run: |
+        python -m pip install --upgrade pip libxml2-python3
+    - run: sh autogen.sh
+    - run: ./configure ${{ matrix.CONFIGURE_ARGS }}
+    - if: matrix.CONFIGURE_ARGS != '--enable-release'
+      run: make
+    - if: matrix.CONFIGURE_ARGS != '--enable-gcov --disable-bindings' && matrix.CONFIGURE_ARGS != '--enable-release'
+      run: make check
+    #  run: |
+    #    python -m pip install cpp-coveralls
+    #    make gcov
+    #    coveralls -e test -e bindings
+    - if: matrix.CONFIGURE_ARGS == '--enable-gcov --disable-bindings'
+      name: Run make codecov if --enable-gcov
+      run: make codecov
+    # FIXME deps
+    - if: matrix.CONFIGURE_ARGS == '--enable-release'
+      name: Run make distcheck if --enable-release
+      run: |
+        sudo apt-get -y install texlive help2man libconvert-binary-c-perl
+        make distcheck
+  linux-cmake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    #strategy:
+    #  fail-fast: true
+    #  matrix:
+    #    CMAKE_ARGS:
+    #      - ""
+    #      - "-DLIBREDWG_LIBONLY=On -DLIBREDWG_DISABLE_JSON=On"
+    #      - "-DLIBREDWG_DISABLE_WRITE=On"
+    steps:
+    - name: setup-python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.8
+    - name: checkout
+      uses: actions/checkout@v1
+      with:
+        fetch-depth: 1
+    - run: cmake -DLIBREDWG_LIBONLY=On -DLIBREDWG_DISABLE_JSON=On .
+    - run: make
+    - run: make test
+  macOS:
+    name: macOS
+    runs-on: macOS-latest
+    steps:
+    - name: init
+      run: brew install automake
+    - name: checkout
+      uses: actions/checkout@v2
+    - run: sh autogen.sh
+    - run: ./configure
+    - run: make
+    - run: make check
+    #- run: make distcheck
+  mingw:
+    name: mingw
+    runs-on: windows-latest
+    env:
+      MSYS2_DIR: msys64
+      MSYS2_ARCH: x86_64
+      MSYSTEM: MINGW64
+      ARCH: win64
+      PLATFORM: x64
+      #PATH: "C:\%MSYS2_DIR%\%MSYSTEM%\bin;C:\%MSYS2_DIR%\usr\bin;%PATH%"
+    steps:
+      # see https://github.com/msys2/setup-msys2
+    - name: setup-msys2
+      uses: msys2/setup-msys2@v2
+      with:
+        path-type: minimal
+        update: true
+        install: >-
+          git
+          base-devel
+          mingw-w64-x86_64-toolchain
+          mingw-w64-x86_64-libtool
+          mingw-w64-x86_64-libiconv
+          mingw-w64-x86_64-libxml2
+          mingw-w64-x86_64-swig
+          mingw-w64-x86_64-python2
+          texinfo
+          gperf
+          mingw-w64-x86_64-perl
+          mingw-w64-x86_64-pcre2
+    - run: reg add "HKLM\Software\Microsoft\Windows\Windows Error Reporting" /f /v DontShowUI /d 1
+    - name: checkout
+      uses: actions/checkout@v2
+    - shell: msys2 {0}
+      run: sh ./autogen.sh
+    - shell: msys2 {0}
+      run: ./configure
+    - shell: msys2 {0}
+      run: make
+    - shell: msys2 {0}
+      run: make check

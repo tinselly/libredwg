@@ -48,7 +48,7 @@ BD,	DXF 40
 @item CELTYPE
 H,	DXF 6
 @item CELWEIGHT
-BSd
+BSd,	DXF 370
 @item CEPSNTYPE
 BS,	DXF 380
 @item CHAMFERA
@@ -110,7 +110,7 @@ BD,	DXF 40
 @item DIMALTMZF
 BD
 @item DIMALTMZS
-T
+T,	DXF 1
 @item DIMALTRND
 BD,	DXF 40
 @item DIMALTTD
@@ -216,7 +216,7 @@ BS
 @item DIMMZF
 BD
 @item DIMMZS
-T
+T,	DXF 1
 @item DIMPOST
 TV,	DXF 1
 @item DIMPOST_T
@@ -366,9 +366,9 @@ RC,	DXF 280
 @item LIMCHECK
 B,	DXF 70
 @item LIMMAX
-2RD,	DXF 20
+2DPOINT,	DXF 20
 @item LIMMIN
-2RD,	DXF 20
+2DPOINT,	DXF 20
 @item LOFTANG1
 BD,	DXF 40
 @item LOFTANG2
@@ -438,9 +438,9 @@ BS,	DXF 70
 @item PLIMCHECK
 B,	DXF 70
 @item PLIMMAX
-2RD,	DXF 20
+2DPOINT,	DXF 20
 @item PLIMMIN
-2RD,	DXF 20
+2DPOINT,	DXF 20
 @item PLINEGEN
 B,	DXF 70
 @item PLINEWID
@@ -870,86 +870,9 @@ BD,	DXF 51
 @end vtable
 @end indentedblock
 
-@strong{ARC_DIMENSION} @anchor{ARC_DIMENSION}
-@cindex entity, ARC_DIMENSION
-@vindex ARC_DIMENSION
-
-@indentedblock
-@vtable @code
-
-@item parent
-struct _dwg_object_entity*
-@item class_version
-RC,	DXF 280
-@item blockname
-TV,	DXF 2
-@item extrusion
-BE,	DXF 210
-@item def_pt
-3BD,	DXF 10
-@item text_midpt
-2RD,	DXF 11
-@item elevation
-BD,	DXF 31
-@item flag
-RC,	DXF 70
-@item flag1
-RC
-@item user_text
-TV,	DXF 1
-@item text_rotation
-BD,	DXF 53
-@item horiz_dir
-BD,	DXF 51
-@item ins_scale
-3BD
-@item ins_rotation
-BD,	DXF 54
-@item attachment
-BS,	DXF 71
-@item lspace_style
-BS,	DXF 72
-@item lspace_factor
-BD,	DXF 41
-@item act_measurement
-BD,	DXF 42
-@item unknown
-B,	DXF 73
-@item flip_arrow1
-B,	DXF 74
-@item flip_arrow2
-B,	DXF 75
-@item clone_ins_pt
-2RD,	DXF 12
-@item dimstyle
-H,	DXF 3
-@item block
-H
-@item xline1_pt
-3BD,	DXF 13
-@item xline2_pt
-3BD,	DXF 14
-@item center_pt
-3BD,	DXF 15
-@item is_partial
-B,	DXF 70
-@item arc_start_param
-BD,	DXF 41
-@item arc_end_param
-BD,	DXF 42
-@item has_leader
-B,	DXF 71
-@item leader1_pt
-3BD,	DXF 16
-@item leader2_pt
-3BD,	DXF 17
-
-@end vtable
-@end indentedblock
-
-@strong{ATEXT} @anchor{ATEXT}
-@cindex entity, ATEXT
-@vindex ATEXT
+@strong{ARCALIGNEDTEXT} @anchor{ARCALIGNEDTEXT}
+@cindex entity, ARCALIGNEDTEXT
+@vindex ARCALIGNEDTEXT
 
 @indentedblock
 @vtable @code
@@ -1012,6 +935,81 @@ BS,	DXF 79
 BS,	DXF 280
 @item arc_handle
 H,	DXF 330
+
+@end vtable
+@end indentedblock
+
+@strong{ARC_DIMENSION} @anchor{ARC_DIMENSION}
+@cindex entity, ARC_DIMENSION
+@vindex ARC_DIMENSION
+
+@indentedblock
+@vtable @code
+
+@item parent
+struct _dwg_object_entity*
+@item class_version
+RC,	DXF 280
+@item extrusion
+BE,	DXF 210
+@item def_pt
+3BD,	DXF 10
+@item text_midpt
+2RD,	DXF 11
+@item elevation
+BD,	DXF 31
+@item flag
+RC,	DXF 70
+@item flag1
+RC
+@item user_text
+T,	DXF 1
+@item text_rotation
+BD,	DXF 53
+@item horiz_dir
+BD,	DXF 51
+@item ins_scale
+3BD_1
+@item ins_rotation
+BD,	DXF 54
+@item attachment
+BS,	DXF 71
+@item lspace_style
+BS,	DXF 72
+@item lspace_factor
+BD,	DXF 41
+@item act_measurement
+BD,	DXF 42
+@item unknown
+B,	DXF 73
+@item flip_arrow1
+B,	DXF 74
+@item flip_arrow2
+B,	DXF 75
+@item clone_ins_pt
+2RD,	DXF 12
+@item dimstyle
+H,	DXF 3
+@item block
+H
+@item xline1_pt
+3BD,	DXF 13
+@item xline2_pt
+3BD,	DXF 14
+@item center_pt
+3BD,	DXF 15
+@item is_partial
+B,	DXF 70
+@item arc_start_param
+BD,	DXF 41
+@item arc_end_param
+BD,	DXF 42
+@item has_leader
+B,	DXF 71
+@item leader1_pt
+3BD,	DXF 16
+@item leader2_pt
+3BD,	DXF 17
 
 @end vtable
 @end indentedblock
@@ -1184,6 +1182,10 @@ T,	DXF 4
 @cindex entity, BODY
 @vindex BODY
 
+@indentedblock
+@xref{3DSOLID}
+@end indentedblock
+
 @strong{CAMERA} @anchor{CAMERA}
 @cindex entity, CAMERA
 @vindex CAMERA
@@ -1220,6 +1222,45 @@ BE,	DXF 210
 @end vtable
 @end indentedblock
 
+@strong{DGNUNDERLAY} @anchor{DGNUNDERLAY}
+@cindex entity, DGNUNDERLAY
+@vindex DGNUNDERLAY
+@anchor{UNDERLAY}
+@vindex UNDERLAY
+
+@indentedblock
+@vtable @code
+
+@item parent
+struct _dwg_object_entity*
+@item extrusion
+BE,	DXF 210
+@item ins_pt
+3BD,	DXF 10
+@item scale
+3BD_1,	DXF 41
+@item angle
+BD,	DXF 50
+@item flag
+RC,	DXF 280
+@item contrast
+RC,	DXF 281
+@item fade
+RC,	DXF 282
+@item num_clip_verts
+BL
+@item clip_verts
+2RD*,	DXF 11
+@item num_clip_inverts
+BS,	DXF 170
+@item clip_inverts
+2RD*,	DXF 12
+@item definition_id
+H,	DXF 340
+
+@end vtable
+@end indentedblock
+
 @strong{DIMENSION_ALIGNED} @anchor{DIMENSION_ALIGNED}
 @cindex entity, DIMENSION_ALIGNED
 @vindex DIMENSION_ALIGNED
@@ -1231,8 +1272,6 @@ BE,	DXF 210
 struct _dwg_object_entity*
 @item class_version
 RC,	DXF 280
-@item blockname
-TV,	DXF 2
 @item extrusion
 BE,	DXF 210
 @item def_pt
@@ -1246,13 +1285,13 @@ RC,	DXF 70
 @item flag1
 RC
 @item user_text
-TV,	DXF 1
+T,	DXF 1
 @item text_rotation
 BD,	DXF 53
 @item horiz_dir
 BD,	DXF 51
 @item ins_scale
-3BD
+3BD_1
 @item ins_rotation
 BD,	DXF 54
 @item attachment
@@ -1296,8 +1335,6 @@ BD
 struct _dwg_object_entity*
 @item class_version
 RC,	DXF 280
-@item blockname
-TV,	DXF 2
 @item extrusion
 BE,	DXF 210
 @item def_pt
@@ -1311,13 +1348,13 @@ RC,	DXF 70
 @item flag1
 RC
 @item user_text
-TV,	DXF 1
+T,	DXF 1
 @item text_rotation
 BD,	DXF 53
 @item horiz_dir
 BD,	DXF 51
 @item ins_scale
-3BD
+3BD_1
 @item ins_rotation
 BD,	DXF 54
 @item attachment
@@ -1363,8 +1400,6 @@ H
 struct _dwg_object_entity*
 @item class_version
 RC,	DXF 280
-@item blockname
-TV,	DXF 2
 @item extrusion
 BE,	DXF 210
 @item def_pt
@@ -1378,13 +1413,13 @@ RC,	DXF 70
 @item flag1
 RC
 @item user_text
-TV,	DXF 1
+T,	DXF 1
 @item text_rotation
 BD,	DXF 53
 @item horiz_dir
 BD,	DXF 51
 @item ins_scale
-3BD
+3BD_1
 @item ins_rotation
 BD,	DXF 54
 @item attachment
@@ -1428,8 +1463,6 @@ H
 struct _dwg_object_entity*
 @item class_version
 RC,	DXF 280
-@item blockname
-TV,	DXF 2
 @item extrusion
 BE,	DXF 210
 @item def_pt
@@ -1443,13 +1476,13 @@ RC,	DXF 70
 @item flag1
 RC
 @item user_text
-TV,	DXF 1
+T,	DXF 1
 @item text_rotation
 BD,	DXF 53
 @item horiz_dir
 BD,	DXF 51
 @item ins_scale
-3BD
+3BD_1
 @item ins_rotation
 BD,	DXF 54
 @item attachment
@@ -1491,8 +1524,6 @@ BD,	DXF 40
 struct _dwg_object_entity*
 @item class_version
 RC,	DXF 280
-@item blockname
-TV,	DXF 2
 @item extrusion
 BE,	DXF 210
 @item def_pt
@@ -1506,13 +1537,13 @@ RC,	DXF 70
 @item flag1
 RC
 @item user_text
-TV,	DXF 1
+T,	DXF 1
 @item text_rotation
 BD,	DXF 53
 @item horiz_dir
 BD,	DXF 51
 @item ins_scale
-3BD
+3BD_1
 @item ins_rotation
 BD,	DXF 54
 @item attachment
@@ -1558,8 +1589,6 @@ BD,	DXF 50
 struct _dwg_object_entity*
 @item class_version
 RC,	DXF 280
-@item blockname
-TV,	DXF 2
 @item extrusion
 BE,	DXF 210
 @item def_pt
@@ -1573,13 +1602,13 @@ RC,	DXF 70
 @item flag1
 RC
 @item user_text
-TV,	DXF 1
+T,	DXF 1
 @item text_rotation
 BD,	DXF 53
 @item horiz_dir
 BD,	DXF 51
 @item ins_scale
-3BD
+3BD_1
 @item ins_rotation
 BD,	DXF 54
 @item attachment
@@ -1623,8 +1652,6 @@ RC
 struct _dwg_object_entity*
 @item class_version
 RC,	DXF 280
-@item blockname
-TV,	DXF 2
 @item extrusion
 BE,	DXF 210
 @item def_pt
@@ -1638,13 +1665,13 @@ RC,	DXF 70
 @item flag1
 RC
 @item user_text
-TV,	DXF 1
+T,	DXF 1
 @item text_rotation
 BD,	DXF 53
 @item horiz_dir
 BD,	DXF 51
 @item ins_scale
-3BD
+3BD_1
 @item ins_rotation
 BD,	DXF 54
 @item attachment
@@ -1673,6 +1700,14 @@ H
 BD,	DXF 40
 
 @end vtable
+@end indentedblock
+
+@strong{DWFUNDERLAY} @anchor{DWFUNDERLAY}
+@cindex entity, DWFUNDERLAY
+@vindex DWFUNDERLAY
+
+@indentedblock
+@xref{UNDERLAY}
 @end indentedblock
 
 @strong{ELLIPSE} @anchor{ELLIPSE}
@@ -2119,8 +2154,6 @@ H
 struct _dwg_object_entity*
 @item class_version
 RC,	DXF 280
-@item blockname
-TV,	DXF 2
 @item extrusion
 BE,	DXF 210
 @item def_pt
@@ -2134,13 +2167,13 @@ RC,	DXF 70
 @item flag1
 RC
 @item user_text
-TV,	DXF 1
+T,	DXF 1
 @item text_rotation
 BD,	DXF 53
 @item horiz_dir
 BD,	DXF 51
 @item ins_scale
-3BD
+3BD_1
 @item ins_rotation
 BD,	DXF 54
 @item attachment
@@ -2709,8 +2742,6 @@ CMC,	DXF 62
 2RD,	DXF 11
 @item num_boundary_handles
 BL,	DXF 99
-@item boundary_handles
-H*
 
 @end vtable
 @end indentedblock
@@ -3047,6 +3078,14 @@ TF,	DXF 310
 @end vtable
 @end indentedblock
 
+@strong{PDFUNDERLAY} @anchor{PDFUNDERLAY}
+@cindex entity, PDFUNDERLAY
+@vindex PDFUNDERLAY
+
+@indentedblock
+@xref{UNDERLAY}
+@end indentedblock
+
 @strong{PLANESURFACE} @anchor{PLANESURFACE}
 @cindex entity, PLANESURFACE
 @vindex PLANESURFACE
@@ -3296,6 +3335,19 @@ struct _dwg_object_entity*
 @end vtable
 @end indentedblock
 
+@strong{POLARGRIPENTITY} @anchor{POLARGRIPENTITY}
+@cindex entity, POLARGRIPENTITY
+@vindex POLARGRIPENTITY
+
+@indentedblock
+@vtable @code
+
+@item parent
+struct _dwg_object_entity*
+
+@end vtable
+@end indentedblock
+
 @strong{POLYLINE_2D} @anchor{POLYLINE_2D}
 @cindex entity, POLYLINE_2D
 @vindex POLYLINE_2D
@@ -3481,6 +3533,10 @@ struct _dwg_object_entity*
 @strong{REGION} @anchor{REGION}
 @cindex entity, REGION
 @vindex REGION
+
+@indentedblock
+@xref{3DSOLID}
+@end indentedblock
 
 @strong{REVOLVEDSURFACE} @anchor{REVOLVEDSURFACE}
 @cindex entity, REVOLVEDSURFACE
@@ -4295,43 +4351,6 @@ BE,	DXF 210
 @end vtable
 @end indentedblock
 
-@strong{UNDERLAY} @anchor{UNDERLAY}
-@cindex entity, UNDERLAY
-@vindex UNDERLAY
-
-@indentedblock
-@vtable @code
-
-@item parent
-struct _dwg_object_entity*
-@item extrusion
-BE,	DXF 210
-@item ins_pt
-3BD,	DXF 10
-@item scale
-3BD_1,	DXF 41
-@item angle
-BD,	DXF 50
-@item flag
-RC,	DXF 280
-@item contrast
-RC,	DXF 281
-@item fade
-RC,	DXF 282
-@item num_clip_verts
-BL
-@item clip_verts
-2RD*,	DXF 11
-@item num_clip_inverts
-BL,	DXF 170
-@item clip_inverts
-2RD*,	DXF 12
-@item definition_id
-H,	DXF 340
-
-@end vtable
-@end indentedblock
-
 @strong{UNKNOWN_ENT} @anchor{UNKNOWN_ENT}
 @cindex entity, UNKNOWN_ENT
 @vindex UNKNOWN_ENT
@@ -4393,9 +4412,17 @@ RC,	DXF 70
 @cindex entity, VERTEX_MESH
 @vindex VERTEX_MESH
 
+@indentedblock
+@xref{VERTEX_3D}
+@end indentedblock
+
 @strong{VERTEX_PFACE} @anchor{VERTEX_PFACE}
 @cindex entity, VERTEX_PFACE
 @vindex VERTEX_PFACE
+
+@indentedblock
+@xref{VERTEX_3D}
+@end indentedblock
 
 @strong{VERTEX_PFACE_FACE} @anchor{VERTEX_PFACE_FACE}
 @cindex entity, VERTEX_PFACE_FACE
@@ -4591,6 +4618,10 @@ H,	DXF 360
 @strong{XLINE} @anchor{XLINE}
 @cindex entity, XLINE
 @vindex XLINE
+
+@indentedblock
+@xref{RAY}
+@end indentedblock
 
 @strong{XYPARAMETERENTITY} @anchor{XYPARAMETERENTITY}
 @cindex entity, XYPARAMETERENTITY
@@ -4844,13 +4875,13 @@ Dwg_ACSH_HistoryNode
 BL,	DXF 90
 @item minor
 BL,	DXF 91
-@item base_radius
+@item height
 BD,	DXF 40
-@item top_major_radius
+@item major_radius
 BD,	DXF 41
-@item top_minor_radius
+@item minor_radius
 BD,	DXF 42
-@item top_x_radius
+@item x_radius
 BD,	DXF 43
 
 @end vtable
@@ -5002,10 +5033,6 @@ BD*,	DXF 43
 
 @item parent
 struct _dwg_object_object*
-@item evalexpr
-Dwg_EvalExpr
-@item history_node
-Dwg_ACSH_HistoryNode
 @item major
 BL,	DXF 90
 @item minor
@@ -5014,9 +5041,9 @@ BL,	DXF 91
 H,	DXF 360
 @item h_nodeid
 BL,	DXF 92
-@item b280
+@item show_history
 B,	DXF 280
-@item b281
+@item record_history
 B,	DXF 281
 
 @end vtable
@@ -5280,8 +5307,6 @@ struct _dwg_object_object*
 BS,	DXF 70
 @item is_default
 B,	DXF 290
-@item has_xdic
-B
 @item scale
 H,	DXF 340
 @item dimension
@@ -5305,8 +5330,6 @@ struct _dwg_object_object*
 BS,	DXF 70
 @item is_default
 B,	DXF 290
-@item has_xdic
-B
 @item scale
 H,	DXF 340
 @item dimension
@@ -5330,8 +5353,6 @@ struct _dwg_object_object*
 BS,	DXF 70
 @item is_default
 B,	DXF 290
-@item has_xdic
-B
 @item scale
 H,	DXF 340
 
@@ -5388,8 +5409,6 @@ struct _dwg_object_object*
 BS,	DXF 70
 @item entries
 H*
-@item objid
-BL
 
 @end vtable
 @end indentedblock
@@ -5460,6 +5479,8 @@ struct _dwg_object_object*
 BS,	DXF 90
 @item assoc_dep
 H,	DXF 330
+@item aab_version
+BS,	DXF 90
 @item actionbody
 H,	DXF 360
 @item pab
@@ -5545,6 +5566,8 @@ struct _dwg_object_object*
 BS,	DXF 90
 @item assoc_dep
 H,	DXF 330
+@item aab_version
+BS,	DXF 90
 @item actionbody
 H,	DXF 360
 @item pab
@@ -5568,19 +5591,15 @@ H,	DXF 330
 
 @item parent
 struct _dwg_object_object*
-@item is_r2013
-BS
-@item aap_version
-BL
-@item name
-TV
+@item aab_version
+BL,	DXF 90
 @item pab
 Dwg_ASSOCPARAMBASEDACTIONBODY
 @item aaab_version
 BL,	DXF 90
-@item aaab_paramblock
+@item paramblock
 T,	DXF 1
-@item aaab_transmatrix
+@item transmatrix
 BD*,	DXF 40
 
 @end vtable
@@ -5595,19 +5614,15 @@ BD*,	DXF 40
 
 @item parent
 struct _dwg_object_object*
-@item is_r2013
-BS
-@item aap_version
-BL
-@item name
-TV
+@item aab_version
+BL,	DXF 90
 @item pab
 Dwg_ASSOCPARAMBASEDACTIONBODY
 @item aaab_version
 BL,	DXF 90
-@item aaab_paramblock
+@item paramblock
 T,	DXF 1
-@item aaab_transmatrix
+@item transmatrix
 BD*,	DXF 40
 @item status
 BS,	DXF 70
@@ -5615,114 +5630,6 @@ BS,	DXF 70
 BL,	DXF 90
 @item items
 Dwg_ARRAYITEMLOCATOR*
-
-@end vtable
-@end indentedblock
-
-@strong{ASSOCARRAYMODIFYPARAMETERS} @anchor{ASSOCARRAYMODIFYPARAMETERS}
-@cindex object, ASSOCARRAYMODIFYPARAMETERS
-@vindex ASSOCARRAYMODIFYPARAMETERS
-
-@indentedblock
-@vtable @code
-
-@item parent
-struct _dwg_object_object*
-@item aap_version
-BL,	DXF 90
-@item num_items
-BL,	DXF 90
-@item classname
-T,	DXF 1
-@item items
-Dwg_ASSOCARRAYITEM*
-@item numitems
-BL
-@item numrows
-BL
-@item numlevels
-BL
-
-@end vtable
-@end indentedblock
-
-@strong{ASSOCARRAYPATHPARAMETERS} @anchor{ASSOCARRAYPATHPARAMETERS}
-@cindex object, ASSOCARRAYPATHPARAMETERS
-@vindex ASSOCARRAYPATHPARAMETERS
-
-@indentedblock
-@vtable @code
-
-@item parent
-struct _dwg_object_object*
-@item aap_version
-BL,	DXF 90
-@item num_items
-BL,	DXF 90
-@item classname
-T,	DXF 1
-@item items
-Dwg_ASSOCARRAYITEM*
-@item numitems
-BL
-@item numrows
-BL
-@item numlevels
-BL
-
-@end vtable
-@end indentedblock
-
-@strong{ASSOCARRAYPOLARPARAMETERS} @anchor{ASSOCARRAYPOLARPARAMETERS}
-@cindex object, ASSOCARRAYPOLARPARAMETERS
-@vindex ASSOCARRAYPOLARPARAMETERS
-
-@indentedblock
-@vtable @code
-
-@item parent
-struct _dwg_object_object*
-@item aap_version
-BL,	DXF 90
-@item num_items
-BL,	DXF 90
-@item classname
-T,	DXF 1
-@item items
-Dwg_ASSOCARRAYITEM*
-@item numitems
-BL
-@item numrows
-BL
-@item numlevels
-BL
-
-@end vtable
-@end indentedblock
-
-@strong{ASSOCARRAYRECTANGULARPARAMETERS} @anchor{ASSOCARRAYRECTANGULARPARAMETERS}
-@cindex object, ASSOCARRAYRECTANGULARPARAMETERS
-@vindex ASSOCARRAYRECTANGULARPARAMETERS
-
-@indentedblock
-@vtable @code
-
-@item parent
-struct _dwg_object_object*
-@item aap_version
-BL,	DXF 90
-@item num_items
-BL,	DXF 90
-@item classname
-T,	DXF 1
-@item items
-Dwg_ASSOCARRAYITEM*
-@item numitems
-BL
-@item numrows
-BL
-@item numlevels
-BL
 
 @end vtable
 @end indentedblock
@@ -6192,6 +6099,8 @@ struct _dwg_object_object*
 BS,	DXF 90
 @item assoc_dep
 H,	DXF 330
+@item aab_version
+BS,	DXF 90
 @item actionbody
 H,	DXF 360
 @item pab
@@ -6341,6 +6250,8 @@ struct _dwg_object_object*
 BS,	DXF 90
 @item assoc_dep
 H,	DXF 330
+@item aab_version
+BS,	DXF 90
 @item actionbody
 H,	DXF 360
 @item pab
@@ -6684,6 +6595,8 @@ struct _dwg_object_object*
 BS,	DXF 90
 @item assoc_dep
 H,	DXF 330
+@item aab_version
+BS,	DXF 90
 @item actionbody
 H,	DXF 360
 @item pab
@@ -6847,35 +6760,6 @@ BL,	DXF 90
 @end vtable
 @end indentedblock
 
-@strong{BACKGROUND} @anchor{BACKGROUND}
-@cindex object, BACKGROUND
-@vindex BACKGROUND
-
-@indentedblock
-@vtable @code
-
-@item parent
-struct _dwg_object_object*
-@item class_version
-BL,	DXF 90
-@item type
-Dwg_BACKGROUND_type
-@item u.sky
-Dwg_BACKGROUND_Sky
-@item u.image
-Dwg_BACKGROUND_Image
-@item u.solid
-Dwg_BACKGROUND_Solid
-@item u.ibl
-Dwg_BACKGROUND_IBL
-@item u.ground_plane
-Dwg_BACKGROUND_GroundPlane
-@item u.gradient
-Dwg_BACKGROUND_Gradient
-
-@end vtable
-@end indentedblock
-
 @strong{BLKREFOBJECTCONTEXTDATA} @anchor{BLKREFOBJECTCONTEXTDATA}
 @cindex object, BLKREFOBJECTCONTEXTDATA
 @vindex BLKREFOBJECTCONTEXTDATA
@@ -6889,8 +6773,6 @@ struct _dwg_object_object*
 BS,	DXF 70
 @item is_default
 B,	DXF 290
-@item has_xdic
-B
 @item scale
 H,	DXF 340
 @item rotation
@@ -8129,6 +8011,10 @@ Dwg_BLOCKPARAMVALUESET
 
 @item parent
 struct _dwg_object_object*
+@item flag
+BS,	DXF 70
+@item block
+H,	DXF 340
 
 @end vtable
 @end indentedblock
@@ -8671,8 +8557,6 @@ struct _dwg_object_object*
 BS,	DXF 70
 @item entries
 H*
-@item objid
-BL
 @item model_space
 H
 @item paper_space
@@ -9320,8 +9204,6 @@ struct _dwg_object_object*
 BS,	DXF 70
 @item entries
 H*
-@item objid
-BL
 @item num_morehandles
 RC,	DXF 71
 @item morehandles
@@ -9343,8 +9225,6 @@ struct _dwg_object_object*
 BS,	DXF 70
 @item is_default
 B,	DXF 290
-@item has_xdic
-B
 @item scale
 H,	DXF 340
 @item dimension
@@ -9411,28 +9291,24 @@ H
 
 @item parent
 struct _dwg_object_object*
-@item has_graph
-BL,	DXF 96
-@item unknown1
-BL,	DXF 97
-@item unknown2
+@item major
 BL
-@item nodeid
-BL,	DXF 91
-@item edge_flags
-BL,	DXF 93
-@item num_evalexpr
-BL,	DXF 95
-@item node_edge1
-BLd,	DXF 92
-@item node_edge2
-BLd,	DXF 92
-@item node_edge3
-BLd,	DXF 92
-@item node_edge4
-BLd,	DXF 92
-@item evalexpr
-H*,	DXF 360
+@item minor
+BL
+@item first_nodeid
+BLd,	DXF 96
+@item first_nodeid_copy
+BLd,	DXF 97
+@item num_nodes
+BL
+@item nodes
+Dwg_EVAL_Node*
+@item has_graph
+B
+@item num_edges
+BL
+@item edges
+Dwg_EVAL_Edge*
 
 @end vtable
 @end indentedblock
@@ -9450,8 +9326,6 @@ struct _dwg_object_object*
 BS,	DXF 70
 @item is_default
 B,	DXF 290
-@item has_xdic
-B
 @item scale
 H,	DXF 340
 @item location
@@ -9682,6 +9556,60 @@ BS
 @end vtable
 @end indentedblock
 
+@strong{GRADIENT_BACKGROUND} @anchor{GRADIENT_BACKGROUND}
+@cindex object, GRADIENT_BACKGROUND
+@vindex GRADIENT_BACKGROUND
+
+@indentedblock
+@vtable @code
+
+@item parent
+struct _dwg_object_object*
+@item class_version
+BL,	DXF 90
+@item color_top
+BLx,	DXF 90
+@item color_middle
+BLx,	DXF 91
+@item color_bottom
+BLx,	DXF 92
+@item horizon
+BD,	DXF 140
+@item height
+BD,	DXF 141
+@item rotation
+BD,	DXF 142
+
+@end vtable
+@end indentedblock
+
+@strong{GROUND_PLANE_BACKGROUND} @anchor{GROUND_PLANE_BACKGROUND}
+@cindex object, GROUND_PLANE_BACKGROUND
+@vindex GROUND_PLANE_BACKGROUND
+
+@indentedblock
+@vtable @code
+
+@item parent
+struct _dwg_object_object*
+@item class_version
+BL,	DXF 90
+@item color_sky_zenith
+BLx,	DXF 90
+@item color_sky_horizon
+BLx,	DXF 91
+@item color_underground_horizon
+BLx,	DXF 92
+@item color_underground_azimuth
+BLx,	DXF 93
+@item color_near
+BLx,	DXF 94
+@item color_far
+BLx,	DXF 95
+
+@end vtable
+@end indentedblock
+
 @strong{GROUP} @anchor{GROUP}
 @cindex object, GROUP
 @vindex GROUP
@@ -9701,6 +9629,31 @@ BS,	DXF 71
 BL
 @item groups
 H*,	DXF 340
+
+@end vtable
+@end indentedblock
+
+@strong{IBL_BACKGROUND} @anchor{IBL_BACKGROUND}
+@cindex object, IBL_BACKGROUND
+@vindex IBL_BACKGROUND
+
+@indentedblock
+@vtable @code
+
+@item parent
+struct _dwg_object_object*
+@item class_version
+BL,	DXF 90
+@item enable
+B,	DXF 290
+@item name
+T,	DXF 1
+@item rotation
+BD,	DXF 40
+@item display_image
+B,	DXF 290
+@item secondary_background
+H,	DXF 340
 
 @end vtable
 @end indentedblock
@@ -9760,6 +9713,33 @@ RC,	DXF 281
 struct _dwg_object_object*
 @item class_version
 BL,	DXF 90
+
+@end vtable
+@end indentedblock
+
+@strong{IMAGE_BACKGROUND} @anchor{IMAGE_BACKGROUND}
+@cindex object, IMAGE_BACKGROUND
+@vindex IMAGE_BACKGROUND
+
+@indentedblock
+@vtable @code
+
+@item parent
+struct _dwg_object_object*
+@item class_version
+BL,	DXF 90
+@item filename
+T,	DXF 300
+@item fit_to_screen
+B,	DXF 290
+@item maintain_aspect_ratio
+B,	DXF 291
+@item use_tiling
+B,	DXF 292
+@item offset
+2BD_1,	DXF 140
+@item scale
+2BD_1,	DXF 142
 
 @end vtable
 @end indentedblock
@@ -9870,8 +9850,6 @@ struct _dwg_object_object*
 BS,	DXF 70
 @item entries
 H*
-@item objid
-BL
 
 @end vtable
 @end indentedblock
@@ -9978,8 +9956,6 @@ struct _dwg_object_object*
 BS,	DXF 70
 @item is_default
 B,	DXF 290
-@item has_xdic
-B
 @item scale
 H,	DXF 340
 @item num_points
@@ -10094,8 +10070,6 @@ struct _dwg_object_object*
 BS,	DXF 70
 @item entries
 H*
-@item objid
-BL
 @item bylayer
 H
 @item byblock
@@ -10325,8 +10299,6 @@ struct _dwg_object_object*
 BS,	DXF 70
 @item is_default
 B,	DXF 290
-@item has_xdic
-B
 @item scale
 H,	DXF 340
 
@@ -10503,11 +10475,9 @@ struct _dwg_object_object*
 BS,	DXF 70
 @item is_default
 B,	DXF 290
-@item has_xdic
-B
 @item scale
 H,	DXF 340
-@item flag
+@item horizontal_mode
 BS,	DXF 70
 @item rotation
 BD,	DXF 50
@@ -10536,20 +10506,18 @@ struct _dwg_object_object*
 BS,	DXF 70
 @item is_default
 B,	DXF 290
-@item has_xdic
-B
 @item scale
 H,	DXF 340
-@item flag
+@item attachment
 BL,	DXF 70
 @item ins_pt
 3BD,	DXF 10
 @item x_axis_dir
 3BD,	DXF 11
 @item rect_height
-BD,	DXF 40
-@item rect_width
 BD,	DXF 41
+@item rect_width
+BD,	DXF 40
 @item extents_width
 BD,	DXF 42
 @item extents_height
@@ -10623,8 +10591,6 @@ struct _dwg_object_object*
 BS,	DXF 70
 @item is_default
 B,	DXF 290
-@item has_xdic
-B
 @item scale
 H,	DXF 340
 @item dimension
@@ -10633,6 +10599,25 @@ Dwg_OCD_Dimension
 3BD,	DXF 11
 @item leader_endpt
 3BD,	DXF 12
+
+@end vtable
+@end indentedblock
+
+@strong{PARTIAL_VIEWING_INDEX} @anchor{PARTIAL_VIEWING_INDEX}
+@cindex object, PARTIAL_VIEWING_INDEX
+@vindex PARTIAL_VIEWING_INDEX
+
+@indentedblock
+@vtable @code
+
+@item parent
+struct _dwg_object_object*
+@item num_entries
+BL
+@item has_entries
+B
+@item entries
+Dwg_PARTIAL_VIEWING_INDEX_Entry*
 
 @end vtable
 @end indentedblock
@@ -10920,8 +10905,6 @@ struct _dwg_object_object*
 BS,	DXF 70
 @item is_default
 B,	DXF 290
-@item has_xdic
-B
 @item scale
 H,	DXF 340
 @item dimension
@@ -10947,8 +10930,6 @@ struct _dwg_object_object*
 BS,	DXF 70
 @item is_default
 B,	DXF 290
-@item has_xdic
-B
 @item scale
 H,	DXF 340
 @item dimension
@@ -11337,6 +11318,40 @@ Dwg_SECTION_typesettings*
 @end vtable
 @end indentedblock
 
+@strong{SKYLIGHT_BACKGROUND} @anchor{SKYLIGHT_BACKGROUND}
+@cindex object, SKYLIGHT_BACKGROUND
+@vindex SKYLIGHT_BACKGROUND
+
+@indentedblock
+@vtable @code
+
+@item parent
+struct _dwg_object_object*
+@item class_version
+BL,	DXF 90
+@item sunid
+H,	DXF 340
+
+@end vtable
+@end indentedblock
+
+@strong{SOLID_BACKGROUND} @anchor{SOLID_BACKGROUND}
+@cindex object, SOLID_BACKGROUND
+@vindex SOLID_BACKGROUND
+
+@indentedblock
+@vtable @code
+
+@item parent
+struct _dwg_object_object*
+@item class_version
+BL,	DXF 90
+@item color
+BLx,	DXF 90
+
+@end vtable
+@end indentedblock
+
 @strong{SORTENTSTABLE} @anchor{SORTENTSTABLE}
 @cindex object, SORTENTSTABLE
 @vindex SORTENTSTABLE
@@ -11484,8 +11499,6 @@ struct _dwg_object_object*
 BS,	DXF 70
 @item entries
 H*
-@item objid
-BL
 
 @end vtable
 @end indentedblock
@@ -11696,11 +11709,9 @@ struct _dwg_object_object*
 BS,	DXF 70
 @item is_default
 B,	DXF 290
-@item has_xdic
-B
 @item scale
 H,	DXF 340
-@item flag
+@item horizontal_mode
 BS,	DXF 70
 @item rotation
 BD,	DXF 50
@@ -11785,7 +11796,7 @@ H,	DXF 346
 @item named_ucs
 H
 @item num_orthopts
-BL
+BS
 @item orthopts
 Dwg_UCS_orthopts*
 
@@ -11809,25 +11820,6 @@ struct _dwg_object_object*
 BS,	DXF 70
 @item entries
 H*
-@item objid
-BL
-
-@end vtable
-@end indentedblock
-
-@strong{UNDERLAYDEFINITION} @anchor{UNDERLAYDEFINITION}
-@cindex object, UNDERLAYDEFINITION
-@vindex UNDERLAYDEFINITION
-
-@indentedblock
-@vtable @code
-
-@item parent
-struct _dwg_object_object*
-@item filename
-T,	DXF 1
-@item name
-T,	DXF 2
 
 @end vtable
 @end indentedblock
@@ -11972,8 +11964,6 @@ struct _dwg_object_object*
 BS,	DXF 70
 @item entries
 H*
-@item objid
-BL
 
 @end vtable
 @end indentedblock
@@ -12379,8 +12369,6 @@ struct _dwg_object_object*
 BS,	DXF 70
 @item entries
 H*
-@item objid
-BL
 
 @end vtable
 @end indentedblock
@@ -12402,8 +12390,6 @@ struct _dwg_object_object*
 BS,	DXF 70
 @item entries
 H*
-@item objid
-BL
 
 @end vtable
 @end indentedblock
@@ -12485,6 +12471,94 @@ H*,	DXF 340
 @end vtable
 @end indentedblock
 
+@strong{PDFDEFINITION} @anchor{PDFDEFINITION}
+@cindex object, PDFDEFINITION
+@vindex PDFDEFINITION
+@anchor{UNDERLAYDEFINITION}
+@vindex UNDERLAYDEFINITION
+
+@indentedblock
+@vtable @code
+
+@item parent
+struct _dwg_object_object*
+@item filename
+T,	DXF 1
+@item name
+T,	DXF 2
+
+@end vtable
+@end indentedblock
+
+@strong{DGNDEFINITION} @anchor{DGNDEFINITION}
+@cindex object, DGNDEFINITION
+@vindex DGNDEFINITION
+
+@indentedblock
+@xref{UNDERLAYDEFINITION}
+@end indentedblock
+
+@strong{DWFDEFINITION} @anchor{DWFDEFINITION}
+@cindex object, DWFDEFINITION
+@vindex DWFDEFINITION
+
+@indentedblock
+@xref{UNDERLAYDEFINITION}
+@end indentedblock
+
+@strong{ASSOCARRAYMODIFYPARAMETERS} @anchor{ASSOCARRAYMODIFYPARAMETERS}
+@cindex object, ASSOCARRAYMODIFYPARAMETERS
+@vindex ASSOCARRAYMODIFYPARAMETERS
+@anchor{ASSOCARRAYPARAMETERS}
+@vindex ASSOCARRAYPARAMETERS
+
+@indentedblock
+@vtable @code
+
+@item parent
+struct _dwg_object_object*
+@item aap_version
+BL
+@item num_items
+BL
+@item classname
+TV
+@item items
+Dwg_ASSOCARRAYITEM*
+@item numitems
+BL
+@item numrows
+BL
+@item numlevels
+BL
+
+@end vtable
+@end indentedblock
+
+@strong{ASSOCARRAYPATHPARAMETERS} @anchor{ASSOCARRAYPATHPARAMETERS}
+@cindex object, ASSOCARRAYPATHPARAMETERS
+@vindex ASSOCARRAYPATHPARAMETERS
+
+@indentedblock
+@xref{ASSOCARRAYPARAMETERS}
+@end indentedblock
+
+@strong{ASSOCARRAYPOLARPARAMETERS} @anchor{ASSOCARRAYPOLARPARAMETERS}
+@cindex object, ASSOCARRAYPOLARPARAMETERS
+@vindex ASSOCARRAYPOLARPARAMETERS
+
+@indentedblock
+@xref{ASSOCARRAYPARAMETERS}
+@end indentedblock
+
+@strong{ASSOCARRAYRECTANGULARPARAMETERS} @anchor{ASSOCARRAYRECTANGULARPARAMETERS}
+@cindex object, ASSOCARRAYRECTANGULARPARAMETERS
+@vindex ASSOCARRAYRECTANGULARPARAMETERS
+
+@indentedblock
+@xref{ASSOCARRAYPARAMETERS}
+@end indentedblock
+
 @strong{Dwg_3DSOLID_material} @anchor{Dwg_3DSOLID_material}
 @vindex Dwg_3DSOLID_material
 
@@ -12542,11 +12616,11 @@ struct _dwg_entity_3DSOLID*
 @item type
 RC
 @item selection_marker
-BL
+BLd
 @item color
 BL
 @item acis_index
-BL
+BLd
 @item num_points
 BL
 @item points
@@ -12708,7 +12782,7 @@ H
 @vtable @code
 
 @item parent
-struct _dwg_object_object*
+struct _dwg_abstractobject_ASSOCARRAYPARAMETERS*
 @item class_version
 BL,	DXF 90
 @item itemloc[3]
@@ -13239,116 +13313,6 @@ RL
 @end vtable
 @end indentedblock
 
-@strong{Dwg_BACKGROUND_Gradient} @anchor{Dwg_BACKGROUND_Gradient}
-@vindex Dwg_BACKGROUND_Gradient
-
-@indentedblock
-@vtable @code
-
-@item color_top
-BLx
-@item color_middle
-BLx
-@item color_bottom
-BLx
-@item horizon
-BD
-@item height
-BD
-@item rotation
-BD
-
-@end vtable
-@end indentedblock
-
-@strong{Dwg_BACKGROUND_GroundPlane} @anchor{Dwg_BACKGROUND_GroundPlane}
-@vindex Dwg_BACKGROUND_GroundPlane
-
-@indentedblock
-@vtable @code
-
-@item color_sky_zenith
-BLx
-@item color_sky_horizon
-BLx
-@item color_underground_horizon
-BLx
-@item color_underground_azimuth
-BLx
-@item color_near
-BLx
-@item color_far
-BLx
-
-@end vtable
-@end indentedblock
-
-@strong{Dwg_BACKGROUND_IBL} @anchor{Dwg_BACKGROUND_IBL}
-@vindex Dwg_BACKGROUND_IBL
-
-@indentedblock
-@vtable @code
-
-@item enable
-B
-@item name
-T
-@item rotation
-BD
-@item display_image
-B
-@item secondary_background
-H
-
-@end vtable
-@end indentedblock
-
-@strong{Dwg_BACKGROUND_Image} @anchor{Dwg_BACKGROUND_Image}
-@vindex Dwg_BACKGROUND_Image
-
-@indentedblock
-@vtable @code
-
-@item filename
-T
-@item fit_to_screen
-B
-@item maintain_aspect_ratio
-B
-@item use_tiling
-B
-@item offset
-2BD
-@item scale
-2BD
-
-@end vtable
-@end indentedblock
-
-@strong{Dwg_BACKGROUND_Sky} @anchor{Dwg_BACKGROUND_Sky}
-@vindex Dwg_BACKGROUND_Sky
-
-@indentedblock
-@vtable @code
-
-@item sunid
-H
-
-@end vtable
-@end indentedblock
-
-@strong{Dwg_BACKGROUND_Solid} @anchor{Dwg_BACKGROUND_Solid}
-@vindex Dwg_BACKGROUND_Solid
-
-@indentedblock
-@vtable @code
-
-@item color
-BLx
-
-@end vtable
-@end indentedblock
-
 @strong{Dwg_BLOCKACTION_connectionpts} @anchor{Dwg_BLOCKACTION_connectionpts}
 @vindex Dwg_BLOCKACTION_connectionpts
 
@@ -13499,6 +13463,8 @@ BL*
 @indentedblock
 @vtable @code
 
+@item parent
+struct _dwg_CONTEXTDATA_submgr*
 @item text
 T,	DXF 3
 @item itemhandle
@@ -13690,7 +13656,7 @@ Dwg_DATATABLE_row*
 @vtable @code
 
 @item parent
-struct _dwg_object_DATATABLE*
+struct _dwg_DATATABLE_column*
 @item value
 Dwg_TABLE_value
 
@@ -13747,8 +13713,6 @@ H*,	DXF 332
 struct _dwg_object_entity*
 @item class_version
 RC,	DXF 280
-@item blockname
-TV,	DXF 2
 @item extrusion
 BE,	DXF 210
 @item def_pt
@@ -13795,6 +13759,30 @@ H
 @end vtable
 @end indentedblock
 
+@strong{Dwg_EVAL_Edge} @anchor{Dwg_EVAL_Edge}
+@vindex Dwg_EVAL_Edge
+
+@indentedblock
+@vtable @code
+
+@item parent
+struct _dwg_object_EVALUATION_GRAPH*
+@item id
+BL,	DXF 92
+@item nextid
+BLd,	DXF 93
+@item e1
+BLd,	DXF 94
+@item e2
+BLd,	DXF 91
+@item e3
+BLd,	DXF 91
+@item out_edge[5]
+BLd
+
+@end vtable
+@end indentedblock
+
 @strong{Dwg_EVAL_Node} @anchor{Dwg_EVAL_Node}
 @vindex Dwg_EVAL_Node
 
@@ -13803,8 +13791,18 @@ H
 
 @item parent
 struct _dwg_object_EVALUATION_GRAPH*
-@item edge[4]
-BL
+@item id
+BL,	DXF 91
+@item edge_flags
+BL,	DXF 93
+@item nextid
+BLd,	DXF 95
+@item evalexpr
+H,	DXF 360
+@item node[4]
+BLd
+@item active_cycles
+B
 
 @end vtable
 @end indentedblock
@@ -13917,14 +13915,14 @@ RL
 @indentedblock
 @vtable @code
 
+@item parent
+struct _dwg_object_TABLECONTENT*
 @item cellstyle
 Dwg_CellStyle
 @item num_merged_cells
 BL,	DXF 90
 @item merged_cells
 Dwg_FormattedTableMerged*
-@item parent
-struct _dwg_object_TABLECONTENT*
 
 @end vtable
 @end indentedblock
@@ -13935,6 +13933,8 @@ struct _dwg_object_TABLECONTENT*
 @indentedblock
 @vtable @code
 
+@item parent
+struct _dwg_FormattedTableData*
 @item top_row
 BL,	DXF 91
 @item left_col
@@ -13943,8 +13943,6 @@ BL,	DXF 92
 BL,	DXF 93
 @item right_col
 BL,	DXF 94
-@item parent
-struct _dwg_FormattedTableData*
 
 @end vtable
 @end indentedblock
@@ -13985,6 +13983,8 @@ BL
 @indentedblock
 @vtable @code
 
+@item parent
+struct _dwg_CellStyle*
 @item index_mask
 BL,	DXF 95
 @item border_overrides
@@ -14001,8 +14001,6 @@ H,	DXF 340
 B,	DXF 93
 @item double_line_spacing
 BD,	DXF 40
-@item parent
-struct _dwg_CellStyle*
 
 @end vtable
 @end indentedblock
@@ -14721,6 +14719,24 @@ B,	DXF 297
 @end vtable
 @end indentedblock
 
+@strong{Dwg_PARTIAL_VIEWING_INDEX_Entry} @anchor{Dwg_PARTIAL_VIEWING_INDEX_Entry}
+@vindex Dwg_PARTIAL_VIEWING_INDEX_Entry
+
+@indentedblock
+@vtable @code
+
+@item parent
+struct _dwg_object_PARTIAL_VIEWING_INDEX*
+@item extents_min
+3BD
+@item extents_max
+3BD
+@item object
+H
+
+@end vtable
+@end indentedblock
+
 @strong{Dwg_POINTCLOUDCOLORMAP_Ramp} @anchor{Dwg_POINTCLOUDCOLORMAP_Ramp}
 @vindex Dwg_POINTCLOUDCOLORMAP_Ramp
 
@@ -15175,6 +15191,8 @@ TU,	DXF 1
 @indentedblock
 @vtable @code
 
+@item parent
+struct _dwg_TABLE_Cell*
 @item attdef
 H,	DXF 331
 @item index
@@ -15191,14 +15209,14 @@ T,	DXF 300
 @indentedblock
 @vtable @code
 
+@item parent
+struct _dwg_entity_TABLE*
 @item position
 3BD
 @item height
 BD
 @item flag
 BL
-@item parent
-struct _dwg_entity_TABLE*
 
 @end vtable
 @end indentedblock
@@ -15209,14 +15227,14 @@ struct _dwg_entity_TABLE*
 @indentedblock
 @vtable @code
 
+@item parent
+struct _dwg_entity_TABLE*
 @item position
 3BD
 @item start
 BL
 @item end
 BL
-@item parent
-struct _dwg_entity_TABLE*
 
 @end vtable
 @end indentedblock
@@ -15227,6 +15245,8 @@ struct _dwg_entity_TABLE*
 @indentedblock
 @vtable @code
 
+@item parent
+struct _dwg_entity_TABLE*
 @item type
 BS,	DXF 171
 @item flags
@@ -15297,8 +15317,6 @@ Dwg_TABLE_value
 BL
 @item attr_defs
 Dwg_TABLE_AttrDef*
-@item parent
-struct _dwg_entity_TABLE*
 
 @end vtable
 @end indentedblock
@@ -15310,7 +15328,7 @@ struct _dwg_entity_TABLE*
 @vtable @code
 
 @item name
-TV,	DXF 300
+T,	DXF 300
 @item value
 Dwg_TABLE_value
 @item cell_parent
@@ -15419,6 +15437,8 @@ struct _dwg_TableRow*
 @indentedblock
 @vtable @code
 
+@item parent
+struct _dwg_TableCell*
 @item type
 BL,	DXF 90
 @item value
@@ -15433,8 +15453,6 @@ Dwg_TableCellContent_Attr*
 BS
 @item content_format
 Dwg_ContentFormat
-@item parent
-struct _dwg_TableCell*
 
 @end vtable
 @end indentedblock
@@ -15445,14 +15463,14 @@ struct _dwg_TableCell*
 @indentedblock
 @vtable @code
 
+@item parent
+struct _dwg_TableCellContent*
 @item attdef
 H,	DXF 330
 @item value
 TV,	DXF 301
 @item index
 BL,	DXF 92
-@item parent
-struct _dwg_TableCellContent*
 
 @end vtable
 @end indentedblock
@@ -15463,6 +15481,8 @@ struct _dwg_TableCellContent*
 @indentedblock
 @vtable @code
 
+@item parent
+struct _dwg_LinkedTableData*
 @item name
 T,	DXF 300
 @item custom_data
@@ -15473,8 +15493,6 @@ Dwg_CellStyle
 BL
 @item width
 BL
-@item parent
-struct _dwg_LinkedTableData*
 
 @end vtable
 @end indentedblock
@@ -15485,6 +15503,8 @@ struct _dwg_LinkedTableData*
 @indentedblock
 @vtable @code
 
+@item parent
+struct _dwg_LinkedTableData*
 @item num_cells
 BL
 @item cells
@@ -15501,8 +15521,6 @@ Dwg_CellStyle
 BL
 @item height
 BL
-@item parent
-struct _dwg_LinkedTableData*
 
 @end vtable
 @end indentedblock
@@ -15715,38 +15733,36 @@ H,	DXF 360
 @end vtable
 @end indentedblock
 
+@strong{SummaryInfo fields} @anchor{SummaryInfo fields}
+@cindex SummaryInfo fields
 
-@node SummaryInfo
-@section SummaryInfo
-@cindex SummaryInfo
-
-All Section SummaryInfo fields.
+@pxref{SummaryInfo}
 
 @indentedblock
 @vtable @code
 
+@item TITLE
+TU16,	DXF 1
+@item SUBJECT
+TU16,	DXF 1
 @item AUTHOR
 TU16,	DXF 1
-@item COMMENTS
-TU16,	DXF 1
-@item HYPERLINKBASE
-TU16,	DXF 1
 @item KEYWORDS
+TU16,	DXF 1
+@item COMMENTS
 TU16,	DXF 1
 @item LASTSAVEDBY
 TU16,	DXF 1
 @item REVISIONNUMBER
 TU16,	DXF 1
-@item SUBJECT
+@item HYPERLINKBASE
 TU16,	DXF 1
-@item TDCREATE
-TIMERLL
 @item TDINDWG
+TIMERLL
+@item TDCREATE
 TIMERLL
 @item TDUPDATE
 TIMERLL
-@item TITLE
-TU16,	DXF 1
 @item num_props
 RS
 @item props

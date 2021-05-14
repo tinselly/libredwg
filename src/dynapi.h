@@ -89,7 +89,7 @@ EXPORT bool dwg_dynapi_common_utf8text (void *restrict _obj,
                                         Dwg_DYNAPI_field *restrict fp)
     __nonnull ((1, 2, 3));
 
-EXPORT bool dwg_dynapi_header_set_value (const Dwg_Data *restrict dwg,
+EXPORT bool dwg_dynapi_header_set_value (Dwg_Data *restrict dwg,
                                          const char *restrict fieldname,
                                          const void *restrict value,
                                          const bool is_utf8)
@@ -185,5 +185,11 @@ ATTRIBUTE_MALLOC char*
 dwg_dynapi_subclass_name (const char *restrict type);
 
 #endif
+
+/* Searches in dwg_name_subclasses[].
+   FIXME: Not yet ready. Need to expand all defines in the spec.
+   Not yet public in 0.11.1 */
+EXPORT bool
+dwg_has_subclass (const char *restrict classname, const char *restrict subclass) __nonnull ((1, 2));
 
 #endif

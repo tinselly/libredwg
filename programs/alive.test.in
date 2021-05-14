@@ -36,6 +36,9 @@ top_builddir="@top_builddir@"
 # artefact for "shellcheck"
 [ -z "$top_builddir" ] && echo $top_builddir
 CFLAGS="@CFLAGS@"
+DISABLE_JSON="@DISABLE_JSON@"
+DISABLE_WRITE="@DISABLE_WRITE@"
+EXEEXT="@EXEEXT@"
 
 i=0
 rm -f ./*-dxf*.log ./*-read,.log ./*-write.log ./*-json.log ./*-rw.log
@@ -75,22 +78,42 @@ run ()
                     arg="-y $arg"
                 fi
                 ;;
-    dwgread)    if [ -n "$addarg" ]; then
-                    arg="-v2 $addarg -o $bdwg-$out.json $arg"
+    dwgread)    if [ -z "$DISABLE_JSON" ]; then
+                    if [ -n "$addarg" ]; then
+                        arg="-v2 $addarg -o $bdwg-$out.json $arg"
+                    else
+                        arg="-v2 -o $dwg.json $arg"
+                    fi
                 else
-                    arg="-v2 -o $dwg.json $arg"
+                    arg="-v2 $arg"
                 fi
                 ;;
-    dwgwrite)   if [ -n "$addarg" ]; then
-                    arg="-y -v2 $addarg -o $bdwg-$out.dwg $dwg.json"
+    dwgwrite)   if [ -z "$DISABLE_JSON" ]; then
+                    if [ -n "$addarg" ]; then
+                        arg="-y -v2 $addarg -o $bdwg-$out.dwg $dwg.json"
+                    else
+                        arg="-y -v2 $dwg.json"
+                    fi
                 else
-                    arg="-y -v2 $dwg.json"
+                    if [ -n "$addarg" ]; then
+                        arg="-y -v2 $addarg -o $bdwg-$out.dwg $dwg.dxf"
+                    else
+                        arg="-y -v2 $dwg.dxf"
+                    fi
                 fi
                 ;;
-    dxfwrite)   if [ -n "$addarg" ]; then
-                    arg="-y -v2 $addarg -o $bdwg-$out.dxf $dwg.json"
+    dxfwrite)   if [ -z "$DISABLE_JSON" ]; then
+                    if [ -n "$addarg" ]; then
+                        arg="-y -v2 $addarg -o $bdwg-$out.dxf $dwg.json"
+                    else
+                        arg="-y -v2 $dwg.json"
+                    fi
                 else
-                    arg="-y -v2 $dwg.json"
+                    if [ -n "$addarg" ]; then
+                        arg="-y -v2 $addarg -o $bdwg-$out.dxf $dwg.dwg"
+                    else
+                        arg="-y -v2 $dwg.dwg"
+                    fi
                 fi
                 ;;
     dxf2dwg)    if [ -n "$addarg" ]; then
@@ -105,7 +128,13 @@ run ()
                     arg="-v2 $arg"
                 fi
                 ;;
-    dwgfuzz)    arg="-rw $arg"
+    dwgfuzz)    if [ -n "$DISABLE_WRITE" ]; then
+                    arg="-dwg $arg"
+                else
+                    arg="-rw $arg"
+                fi
+                ;;
+    dwgadd)     arg="-o dwgadd.dwg $DATADIR/../../examples/dwgadd.example"
                 ;;
     esac
     if [ -n "$VALGRIND" ] && [ -n "$LOG_COMPILER" ]; then
@@ -124,7 +153,11 @@ run ()
     then
        TESTPROG="env ASAN_OPTIONS=detect_leaks=0 $TESTPROG"
     fi
-    # rewrite leaked 3DSOLID
+    if test "$bprog" = "dwgadd" -a -n "@HAVE_ASAN@"
+    then
+       TESTPROG="env ASAN_OPTIONS=detect_leaks=0 $TESTPROG"
+    fi
+    # rewrite leaking 3DSOLID
     #if test $bprog = dwgrewrite -a -n "@HAVE_ASAN@" -a "$bdwg" = example_2000
     #then
     #   TESTPROG="env ASAN_OPTIONS=detect_leaks=0 $TESTPROG"
@@ -134,7 +167,7 @@ run ()
     #then
     #   TESTPROG="env ASAN_OPTIONS=detect_leaks=0 $TESTPROG"
     #fi
-    echo "$TESTPROG ./$prog $arg 2>$log"
+    echo "$TESTPROG $prog $arg 2>$log"
     # writers can hang
     #if test $bprog = dwgrewrite -o $bprog = dwgwrite -o $bprog = dxf2dwg
     #then
@@ -201,9 +234,15 @@ for d in $DATA; do
 done
 
 for prog in $PROGS ; do
-    for dwg in $DATA; do
-        run "$prog" "$dwg"
-    done
+    case $prog in
+    *dwgadd*)
+        run "$prog" "."
+        ;;
+    *)  for dwg in $DATA; do
+            run "$prog" "$dwg"
+        done
+        ;;
+    esac
 done
 
 # dwgread converts to json here, but has no --as yet
@@ -212,20 +251,21 @@ if false; then
 for prog in dwgwrite dwgrewrite dxf2dwg dwg2dxf dxfwrite ; do
     for dwg in $DATA; do
         for as in --as=r13 --as=r2000 --as=r2004 --as=r2010 --as=r2013 --as=r2018; do
-            run "$prog" "$dwg" "$as"
+            run "$prog${EXEEXT}" "$dwg" "$as"
         done
     done
 done
 fi
 
 case $PROGS in
-  *dwggrep*)
-    echo "@LTEXEC@ ./dwggrep -i -c tekst ${DATADIR}/example_*.dwg"
-    if test "$(@LTEXEC@ ./dwggrep -i -c tekst "${DATADIR}"/example_*.dwg)" != "24"; then
-      i=$((i+1))
-      echo "dwggrep failure $?"
-    fi
-
+    *dwggrep*)
+        echo "@LTEXEC@ dwggrep${EXEEXT} -i -c tekst ${DATADIR}/example_*.dwg"
+        n="$(@LTEXEC@ ./dwggrep${EXEEXT} -i -c tekst "${DATADIR}"/example_*.dwg | tr -d "\r")"
+        if test "$n" != "24"; then
+            i=$((i+1))
+            echo "dwggrep failure $?"
+            echo "result $n, expected 24"
+        fi
 esac
 
 #run dwgread r11/ACEL10
@@ -236,7 +276,7 @@ esac
 # only in programs, not examples:
 if [ -f cmp_dxf.pl ] && [ -e dwg2dxf ]; then
     for dwg in $DATA; do
-        run dwg2dxf "$dwg"
+        run dwg2dxf${EXEEXT} "$dwg"
         #if [ -f ${DATADIR}/$dwg.dxf ]; then
         #    base="$(basename "$dwg" .dwg)"
         #    perl filt_dxf.pl ${DATADIR}/$dwg.dxf > $base.dxf.orig

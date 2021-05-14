@@ -1,4 +1,4 @@
-// TODO DEBUGGING
+// unstable
 #define DWG_TYPE DWG_TYPE_LEADEROBJECTCONTEXTDATA
 #include "common.c"
 
@@ -6,10 +6,10 @@ void
 api_process (dwg_object *obj)
 {
   int error;
-  BITCODE_BS class_version; /*!< r2010+ =3 */
+  ANNOTSCALEOBJECTCONTEXTDATA_fields;
+  /*BITCODE_BS class_version; // r2010+ =3
   BITCODE_B is_default;
-  BITCODE_B has_xdic;
-  BITCODE_H scale;
+  BITCODE_H scale; */
   BITCODE_BL i, num_points;
   BITCODE_3DPOINT* points;	/*!< DXF 10 */
   BITCODE_B b290;		/*!< DXF 290 */
@@ -18,12 +18,10 @@ api_process (dwg_object *obj)
   BITCODE_3DPOINT endptproj;	/*!< DXF 13 */
 
   Dwg_Version_Type dwg_version = obj->parent->header.version;
-#ifdef DEBUG_CLASSES
   dwg_obj_leaderobjectcontextdata *_obj = dwg_object_to_LEADEROBJECTCONTEXTDATA (obj);
 
   CHK_ENTITY_TYPE (_obj, LEADEROBJECTCONTEXTDATA, class_version, BS);
   CHK_ENTITY_TYPE (_obj, LEADEROBJECTCONTEXTDATA, is_default, B);
-  CHK_ENTITY_TYPE (_obj, LEADEROBJECTCONTEXTDATA, has_xdic, B);
   CHK_ENTITY_H (_obj, LEADEROBJECTCONTEXTDATA, scale);
 
   CHK_ENTITY_TYPE (_obj, LEADEROBJECTCONTEXTDATA, num_points, BL);
@@ -37,5 +35,4 @@ api_process (dwg_object *obj)
   CHK_ENTITY_3RD (_obj, LEADEROBJECTCONTEXTDATA, inspt_offset);
   CHK_ENTITY_3RD (_obj, LEADEROBJECTCONTEXTDATA, endptproj);
   CHK_ENTITY_TYPE (_obj, LEADEROBJECTCONTEXTDATA, b290, B);
-#endif
 }

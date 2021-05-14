@@ -1,7 +1,7 @@
 /*****************************************************************************/
 /*  LibreDWG - free implementation of the DWG file format                    */
 /*                                                                           */
-/*  Copyright (C) 2009,2018-2020 Free Software Foundation, Inc.              */
+/*  Copyright (C) 2009,2018-2021 Free Software Foundation, Inc.              */
 /*                                                                           */
 /*  This library is free software, licensed under the terms of the GNU       */
 /*  General Public License as published by the Free Software Foundation,     */
@@ -491,12 +491,10 @@ bit_read_RD (Bit_Chain *dat)
   unsigned char byte[8];
   double *result;
 
+  //CHK_OVERFLOW_PLUS (8, __FUNCTION__, bit_nan ())
   // TODO: big-endian
   for (i = 0; i < 8; i++)
-    {
-      byte[i] = bit_read_RC (dat);
-      CHK_OVERFLOW(__FUNCTION__, bit_nan ())
-    }
+    byte[i] = bit_read_RC (dat);
 
   result = (double *)byte;
   return (*result);
@@ -1065,6 +1063,7 @@ bit_write_BE (Bit_Chain *dat, double x, double y, double z)
     }
 }
 
+// TODO ensure length 1, dwg_geom_normalize()
 void
 normalize_BE (BITCODE_3BD ext)
 {
@@ -1115,6 +1114,12 @@ bit_read_DD (Bit_Chain *dat, double default_value)
       CHK_OVERFLOW(__FUNCTION__, bit_nan ())
       return default_value;
     }
+}
+
+int
+bit_eq_DD (double value, double default_value)
+{
+  return fabs (value - default_value) < 1e-12;
 }
 
 /** Write bit-double with default.
@@ -1366,6 +1371,8 @@ bit_write_CRC (Bit_Chain *dat, long unsigned int start_address, uint16_t seed)
   while (dat->bit > 0)
     bit_write_B (dat, 0);
 
+  if (start_address > dat->byte || (dat->byte + 2) >= dat->size)
+      bit_chain_alloc (dat);
   if (start_address > dat->byte || dat->byte >= dat->size)
     {
       loglevel = dat->opts & DWG_OPTS_LOGLEVEL;
@@ -1391,6 +1398,8 @@ bit_write_CRC_LE (Bit_Chain *dat, long unsigned int start_address, uint16_t seed
   while (dat->bit > 0)
     bit_write_B (dat, 0);
 
+  if (start_address > dat->byte || (dat->byte + 2) >= dat->size)
+      bit_chain_alloc (dat);
   if (start_address > dat->byte || dat->byte >= dat->size)
     {
       loglevel = dat->opts & DWG_OPTS_LOGLEVEL;
@@ -1417,6 +1426,7 @@ bit_read_fixed (Bit_Chain *restrict dat, BITCODE_RC *restrict dest,
       loglevel = dat->opts & DWG_OPTS_LOGLEVEL;
       LOG_ERROR ("%s buffer overflow at pos %lu, size %lu", __FUNCTION__,
                  dat->byte, dat->size)
+      memset (dest, 0, length);
       return;
     }
   if (dat->bit == 0)
@@ -1441,14 +1451,15 @@ ATTRIBUTE_MALLOC
 BITCODE_TF
 bit_read_TF (Bit_Chain *restrict dat, unsigned int length)
 {
-  BITCODE_RC *chain = (BITCODE_RC *)calloc (length + 1, 1);
+  BITCODE_RC *chain;
+  CHK_OVERFLOW_PLUS (length,__FUNCTION__,NULL)
+  chain = (BITCODE_RC *)calloc (length + 1, 1);
   if (!chain)
     {
       loglevel = dat->opts & DWG_OPTS_LOGLEVEL;
       LOG_ERROR ("Out of memory");
       return NULL;
     }
-
   bit_read_fixed (dat, chain, length);
   chain[length] = '\0';
 
@@ -1465,7 +1476,9 @@ bit_read_bits (Bit_Chain *dat, unsigned long bits)
 {
   unsigned bytes = bits / 8;
   int rest = bits % 8;
-  BITCODE_RC *restrict chain = (BITCODE_RC *)calloc (bytes + (rest ? 2 : 1), 1);
+  BITCODE_RC *restrict chain;
+  CHK_OVERFLOW_PLUS (bytes,__FUNCTION__,NULL)
+  chain = (BITCODE_RC *)calloc (bytes + (rest ? 2 : 1), 1);
   if (!chain)
     {
       loglevel = dat->opts & DWG_OPTS_LOGLEVEL;
@@ -1496,6 +1509,17 @@ bit_read_bits (Bit_Chain *dat, unsigned long bits)
 void
 bit_write_TF (Bit_Chain *restrict dat, BITCODE_TF restrict chain, unsigned int length)
 {
+  if (!chain)
+    {
+      loglevel = dat->opts & DWG_OPTS_LOGLEVEL;
+      LOG_ERROR ("Empty TF with length %u", length);
+      if (length <= 128) // either chain or length is wrong
+        {
+          for (unsigned int i = 0; i < length; i++)
+            bit_write_RC (dat, 0);
+        }
+      return;
+    }
   if (dat->bit == 0 && dat->byte + length < dat->size)
     {
       memcpy (&dat->chain[dat->byte], chain, length);
@@ -1529,9 +1553,14 @@ bit_read_TV (Bit_Chain *restrict dat)
     }
   for (i = 0; i < length; i++)
     chain[i] = bit_read_RC (dat);
-  // normally not needed, as the DWG itself contains the ending \0 as last char
+  // check if the string is already zero-terminated or not.
+  // only observed >=r2004 as writer app
+  if (length > 0 && dat->from_version > R_2000 && chain[length - 1] != '\0')
+    LOG_HANDLE ("TV-not-ZERO %u\n ", length)
+  else if (length > 0 && dat->from_version <= R_2000 && chain[length - 1] == '\0')
+    LOG_HANDLE ("TV-ZERO %u\n", length)
+  // normally not needed, as the DWG since r2004 itself contains the ending \0 as last char
   chain[i] = '\0';
-
   return (char *)chain;
 }
 
@@ -1542,8 +1571,9 @@ static int heX (unsigned char c)
   return c >= 10 ? 'A' + c - 10 : '0' + c;
 }
 
-/* converts TU to ASCII with embedded \U+XXXX.
-   max len widechars.
+/* Converts TU to ASCII with embedded \U+XXXX.
+   Max len widechars.
+   No codepage support yet, only cp 30.
  */
 char *
 bit_embed_TU_size (BITCODE_TU restrict wstr, const int len)
@@ -1566,7 +1596,7 @@ bit_embed_TU_size (BITCODE_TU restrict wstr, const int len)
       if ((uintptr_t)wstr % SIZEOF_SIZE_T)
         {
           unsigned char *b = (unsigned char *)wstr;
-          c = (b[1] << 8) + b[0];
+          c = TU_to_int(b);
           wstr++;
         }
       else
@@ -1618,14 +1648,14 @@ bit_wcs2nlen (const BITCODE_TU restrict wstr, const size_t maxlen)
   if ((uintptr_t)wstr % SIZEOF_SIZE_T)
     {
       unsigned char *b = (unsigned char *)wstr;
-      uint16_t c = (b[0] << 8) + b[1];
+      uint16_t c = TU_to_int(b);
       while (c)
         {
           len++;
           if (len >= maxlen)
             return 0;
           b += 2;
-          c = (b[0] << 8) + b[1];
+          c = TU_to_int(b);
         }
       return len;
     }
@@ -1661,12 +1691,12 @@ bit_wcs2len (const BITCODE_TU restrict wstr)
   if ((uintptr_t)wstr % SIZEOF_SIZE_T)
     {
       unsigned char *b = (unsigned char *)wstr;
-      uint16_t c = (b[0] << 8) + b[1];
+      uint16_t c = TU_to_int(b);
       while (c)
         {
           len++;
           b += 2;
-          c = (b[0] << 8) + b[1];
+          c = TU_to_int(b);
         }
       return len;
     }
@@ -1696,11 +1726,11 @@ bit_wcs2cpy (BITCODE_TU restrict dest, const BITCODE_TU restrict src)
   if ((uintptr_t)src % SIZEOF_SIZE_T)
     {
       unsigned char *b = (unsigned char *)src;
-      *d = (b[0] << 8) + b[1];
+      *d = TU_to_int(b);
       while (*d)
         {
           b += 2;
-          *d = (b[0] << 8) + b[1];
+          *d = TU_to_int(b);
         }
       return dest;
     }
@@ -1730,11 +1760,11 @@ bit_wcs2cmp (BITCODE_TU restrict dest, const BITCODE_TU restrict src)
   if ((uintptr_t)src % SIZEOF_SIZE_T)
     {
       unsigned char *s = (unsigned char *)src;
-      uint16_t s1 = (s[0] << 8) + s[1];
+      uint16_t s1 = TU_to_int(s);
       while (*d++ == s1)
         {
           s += 2;
-          s1 = (s[0] << 8) + s[1];
+          s1 = TU_to_int(s);
         }
       return (*d || *s1) ? 1 : 0;
     }
@@ -1789,12 +1819,16 @@ bit_embed_TU (BITCODE_TU restrict wstr)
 }
 
 /** Write ASCIIZ text.
+    Starting with r2004 as writer (not target version) acad always
+    writes a terminating zero.
  */
 void
 bit_write_TV (Bit_Chain *restrict dat, BITCODE_TV restrict chain)
 {
   int i;
-  int length = (chain && *chain) ? strlen ((const char *)chain) + 1 : 0;
+  int length = (chain && *chain) ? strlen ((const char *)chain) : 0;
+  if (dat->version <= R_2000 && length)
+    length++;
   bit_write_BS (dat, length);
   for (i = 0; i < length; i++)
     bit_write_RC (dat, (unsigned char)chain[i]);
@@ -1813,7 +1847,7 @@ bit_write_T (Bit_Chain *restrict dat, BITCODE_T restrict s)
 {
   int i, length;
 
-  // only if from r2007+ DWG, not JSON, DXF
+  // only if from r2007+ DWG. not JSON, DXF, add API.
   if (IS_FROM_TU (dat))
     {
       // downconvert TU to TV
@@ -1902,6 +1936,32 @@ bit_read_TU (Bit_Chain *restrict dat)
   // normally not needed, as the DWG itself contains the ending 0 as last char
   // but we enforce writing it.
   chain[length] = 0;
+  return chain;
+}
+
+BITCODE_TU
+bit_read_TU_len (Bit_Chain *restrict dat, unsigned int *lenp)
+{
+  unsigned int i;
+  unsigned int length;
+  BITCODE_TU chain;
+
+  CHK_OVERFLOW_PLUS (1,__FUNCTION__,NULL)
+  length = bit_read_BS (dat);
+  CHK_OVERFLOW_PLUS (length * 2,__FUNCTION__,NULL)
+  chain = (BITCODE_TU)malloc ((length + 1) * 2);
+  if (!chain)
+    {
+      loglevel = dat->opts & DWG_OPTS_LOGLEVEL;
+      LOG_ERROR ("Out of memory")
+      return NULL;
+    }
+  for (i = 0; i < length; i++)
+    chain[i] = bit_read_RS (dat); // probably without byte swapping
+  // normally not needed, as the DWG itself contains the ending 0 as last char
+  // but we enforce writing it.
+  chain[length] = 0;
+  *lenp = length;
   return chain;
 }
 
@@ -2180,9 +2240,11 @@ bit_read_T (Bit_Chain *restrict dat)
     return (BITCODE_T)bit_read_TV (dat);
 }
 
-/* converts UCS-2 to UTF-8 */
+/* converts UCS-2LE to UTF-8.
+   first pass to get the dest len. single malloc.
+ */
 char *
-bit_convert_TU (BITCODE_TU restrict wstr)
+bit_convert_TU (const BITCODE_TU restrict wstr)
 {
   BITCODE_TU tmp = wstr;
   char *str;
@@ -2196,16 +2258,18 @@ bit_convert_TU (BITCODE_TU restrict wstr)
   if ((uintptr_t)wstr % SIZEOF_SIZE_T)
     {
       unsigned char *b = (unsigned char*)wstr;
-      c = (b[0] << 8) + b[1];
+      c = TU_to_int(b);
       while (c)
         {
           len++;
-          if (c >= 256)
-            len++;
-          if (c >= 0x800)
-            len++;
+          if (c >= 0x80)
+            {
+              len++;
+              if (c >= 0x800)
+                len++;
+            }
           b += 2;
-          c = (b[0] << 8) + b[1];
+          c = TU_to_int(b);
         }
     }
   else
@@ -2213,16 +2277,18 @@ bit_convert_TU (BITCODE_TU restrict wstr)
   while ((c = *tmp++))
     {
       len++;
-      if (c >= 256)
-        len++;
-      if (c >= 0x800)
-        len++;
+      if (c >= 0x80)
+        {
+          len++;
+          if (c >= 0x800)
+            len++;
+        }
 #if 0
         loglevel = 5;
         LOG_INSANE ("U+%04X ", c);
 #endif
     }
-  str = (char*)malloc (len + 2);
+  str = (char*)malloc (len + 1);
   if (!str)
     {
       loglevel = 1;
@@ -2230,11 +2296,13 @@ bit_convert_TU (BITCODE_TU restrict wstr)
       return NULL;
     }
   i = 0;
+  tmp = wstr;
 #ifdef HAVE_ALIGNED_ACCESS_REQUIRED
   if ((uintptr_t)wstr % SIZEOF_SIZE_T)
     {
       unsigned char *b = (unsigned char*)wstr;
-      c = (b[0] << 8) + b[1];
+      // possible gcc bug
+      c = TU_to_int(b);
       while (c && i < len)
         {
           if (c < 0x80)
@@ -2254,12 +2322,12 @@ bit_convert_TU (BITCODE_TU restrict wstr)
             }
 
           b += 2;
-          c = (b[0] << 8) + b[1];
+          c = TU_to_int(b);
         }
     }
   else
 #endif
-  while ((c = *wstr++) && i < len)
+  while ((c = *tmp++) && i < len)
     {
       if (c < 0x80)
         {
@@ -2292,6 +2360,105 @@ bit_convert_TU (BITCODE_TU restrict wstr)
         HANDLER (OUTPUT, "ERROR: overlarge unicode codepoint U+%0X", c);
      */
     }
+  if (i <= len + 1)
+    str[i] = '\0';
+  return str;
+}
+
+#define EXTEND_SIZE(str, i, len)                \
+  if (i > len)                                  \
+    str = (char*) realloc (str, i+1)
+
+/* converts UCS-2LE to UTF-8. len is the wstr length, not the resulting utf8-size.
+   single pass with realloc. */
+char *
+bit_TU_to_utf8_len (const BITCODE_TU restrict wstr, const int len)
+{
+  BITCODE_TU tmp = wstr;
+  char *str;
+  int i = 0;
+  uint16_t c = 0;
+
+  if (!wstr || !len)
+    return NULL;
+  str = (char*)malloc (len + 1);
+  if (!str)
+    {
+      loglevel = 1;
+      LOG_ERROR ("Out of memory")
+      return NULL;
+    }
+  i = 0;
+  tmp = wstr;
+#ifdef HAVE_ALIGNED_ACCESS_REQUIRED
+  if ((uintptr_t)wstr % SIZEOF_SIZE_T)
+    {
+      unsigned char *b = (unsigned char*)wstr;
+      // possible gcc bug
+      c = TU_to_int(b);
+      while (c && i < len)
+        {
+          if (c < 0x80)
+            {
+              str[i++] = c & 0xFF;
+            }
+          else if (c < 0x800)
+            {
+              EXTEND_SIZE(str, i + 1, len);
+              str[i++] = (c >> 6) | 0xC0;
+              str[i++] = (c & 0x3F) | 0x80;
+            }
+          else /* if (c < 0x10000) */
+            {
+              EXTEND_SIZE(str, i + 2, len);
+              str[i++] = (c >> 12) | 0xE0;
+              str[i++] = ((c >> 6) & 0x3F) | 0x80;
+              str[i++] = (c & 0x3F) | 0x80;
+            }
+
+          b += 2;
+          c = TU_to_int(b);
+        }
+    }
+  else
+#endif
+  while ((c = *tmp++) && i < len)
+    {
+      if (c < 0x80)
+        {
+          str[i++] = c & 0xFF;
+        }
+      else if (c < 0x800)
+        {
+          EXTEND_SIZE(str, i + 1, len);
+          str[i++] = (c >> 6) | 0xC0;
+          str[i++] = (c & 0x3F) | 0x80;
+        }
+      else /* if (c < 0x10000) */
+        { /* windows ucs-2 has no D800-DC00 surrogate pairs. go straight up */
+          /*if (i+3 > len) {
+            str = realloc(str, i+3);
+            len = i+2;
+          }*/
+          EXTEND_SIZE(str, i + 2, len);
+          str[i++] = (c >> 12) | 0xE0;
+          str[i++] = ((c >> 6) & 0x3F) | 0x80;
+          str[i++] = (c & 0x3F) | 0x80;
+        }
+      /*
+      else if (c < 0x110000)
+        {
+          EXTEND_SIZE(str, i + 3, len);
+          str[i++] = (c >> 18) | 0xF0;
+          str[i++] = ((c >> 12) & 0x3F) | 0x80;
+          str[i++] = ((c >> 6) & 0x3F) | 0x80;
+          str[i++] = (c & 0x3F) | 0x80;
+        }
+      else
+        HANDLER (OUTPUT, "ERROR: overlarge unicode codepoint U+%0X", c);
+     */
+    }
+  EXTEND_SIZE(str, i + 1, len);
   str[i] = '\0';
   return str;
 }
@@ -2302,20 +2469,20 @@ bit_convert_TU (BITCODE_TU restrict wstr)
     Returns NULL if not enough room in dest.
 */
 char *
-bit_utf8_to_TV (char *restrict dest, const unsigned char *restrict src, const int destlen)
+bit_utf8_to_TV (char *restrict dest, const unsigned char *restrict src,
+                const int destlen, const int srclen, const unsigned cquoted)
 {
   unsigned char c;
   unsigned char *s = (unsigned char *)src;
   const char* endp = dest + destlen;
+  const unsigned char* ends = src + srclen;
   char *d = dest;
 
   while ((c = *s++))
     {
       if (dest >= endp)
-        {
-          return NULL;
-        }
-      else if (c == '\\' && dest+1 < endp &&
+        return NULL;
+      else if (cquoted && c == '\\' && dest+1 < endp && s + 1 <= ends &&
           // skip \" to " and \\ to \.
           (*s == '"' || *s == '\\' || *s == 'r' || *s == 'n'))
         {
@@ -2331,7 +2498,7 @@ bit_utf8_to_TV (char *restrict dest, const unsigned char *restrict src, const in
               }
         }
       // \uxxxx => \U+XXXX as in bit_embed_TU
-      else if (c == '\\' && dest+7 < endp && *s == 'u')
+      else if (c == '\\' && dest+7 < endp && *s == 'u' && s + 5 <= ends)
         {
           *dest++ = c;
           *dest++ = 'U';
@@ -2346,7 +2513,7 @@ bit_utf8_to_TV (char *restrict dest, const unsigned char *restrict src, const in
         {
           *dest++ = c;
         }
-      else if ((c & 0xe0) == 0xc0)
+      else if ((c & 0xe0) == 0xc0 && s + 1 <= ends)
         {
           /* ignore invalid utf8 for now */
           if (dest+7 < endp)
@@ -2367,7 +2534,7 @@ bit_utf8_to_TV (char *restrict dest, const unsigned char *restrict src, const in
       else if ((c & 0xf0) == 0xe0)
         {
           /* warn on invalid utf8 */
-          if (dest+2 < endp &&
+          if (dest+2 < endp && s + 1 <= ends &&
               (*s < 0x80 || *s > 0xBF || *(s+1) < 0x80 || *(s+1) > 0xBF))
             {
               LOG_WARN ("utf-8: BAD_CONTINUATION_BYTE %s", s);
@@ -2376,7 +2543,7 @@ bit_utf8_to_TV (char *restrict dest, const unsigned char *restrict src, const in
             {
               LOG_WARN ("utf-8: NON_SHORTEST %s", s);
             }
-          if (dest+7 < endp)
+          if (dest+7 < endp && s + 1 <= ends)
             {
               BITCODE_RS wc = ((c & 0x0f) << 12) | ((*s & 0x3f) << 6) | (*(s+1) & 0x3f);
               *dest++ = '\\';
@@ -2389,9 +2556,13 @@ bit_utf8_to_TV (char *restrict dest, const unsigned char *restrict src, const in
             }
           else
             return NULL;
+          if (s + 2 > ends)
+            break;
           s++;
           s++;
         }
+      if (s >= ends)
+        break;
       /* everything above 0xf0 exceeds ucs-2, 4-6 byte seqs */
     }
 
@@ -2406,7 +2577,7 @@ bit_utf8_to_TV (char *restrict dest, const unsigned char *restrict src, const in
     TODO: unquote json_cquote as above.
  */
 BITCODE_TU
-bit_utf8_to_TU (char *restrict str)
+bit_utf8_to_TU (char *restrict str, const unsigned cquoted)
 {
   BITCODE_TU wstr;
   int i = 0;
@@ -2466,7 +2637,7 @@ bit_utf8_to_TU (char *restrict str)
 int
 bit_eq_T (Bit_Chain *restrict dat, const BITCODE_T restrict wstr1, const char *restrict str2)
 {
-  if (dat->version >= R_2007)
+  if (IS_FROM_TU (dat))
     return bit_eq_TU (str2, (BITCODE_TU)wstr1);
   else
     return !strcmp (wstr1, str2);
@@ -2476,8 +2647,12 @@ bit_eq_T (Bit_Chain *restrict dat, const BITCODE_T restrict wstr1, const char *r
 int
 bit_eq_TU (const char *restrict str, BITCODE_TU restrict wstr)
 {
-  char *utf8 = bit_convert_TU (wstr);
-  int result = strcmp (str, utf8) ? 0 : 1;
+  char *utf8;
+  int result;
+  if (!str)
+    return (wstr && *wstr) ? 0 : 1;
+  utf8 = bit_convert_TU (wstr);
+  result = utf8 ? (strcmp (str, utf8) ? 0 : 1) : 0;
   free (utf8);
   return result;
 }
@@ -2497,7 +2672,7 @@ int bit_empty_T (Bit_Chain *restrict dat, BITCODE_T restrict str)
       if ((uintptr_t)str % SIZEOF_SIZE_T)
         {
           unsigned char *b = (unsigned char*)str;
-          c = (b[0] << 8) + b[1];
+          c = TU_to_int(b);
           return !c;
         }
 #endif
@@ -2512,7 +2687,7 @@ bit_set_T (Bit_Chain *dat, const char* restrict src)
   if (!(IS_FROM_TU (dat)))
     return strdup (src);
   else
-    return (BITCODE_T)bit_utf8_to_TU ((char*)src);
+    return (BITCODE_T)bit_utf8_to_TU ((char*)src, 0);
 }
 
 /** Read 1 bitlong according to normal order

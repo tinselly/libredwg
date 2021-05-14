@@ -1,7 +1,7 @@
 /*****************************************************************************/
 /*  LibreDWG - free implementation of the DWG file format                    */
 /*                                                                           */
-/*  Copyright (C) 2018-2020 Free Software Foundation, Inc.                   */
+/*  Copyright (C) 2018-2021 Free Software Foundation, Inc.                   */
 /*                                                                           */
 /*  This library is free software, licensed under the terms of the GNU       */
 /*  General Public License as published by the Free Software Foundation,     */
@@ -30,7 +30,6 @@
 #include <assert.h>
 //#include <math.h>
 
-#define IS_PRINT
 #define IS_DXF
 #include "common.h"
 #include "bits.h"
@@ -65,7 +64,8 @@ static int dwg_dxf_object (Bit_Chain *restrict dat,
 static int dxf_3dsolid (Bit_Chain *restrict dat,
                         const Dwg_Object *restrict obj,
                         Dwg_Entity_3DSOLID *restrict _obj);
-static void dxf_fixup_string (Bit_Chain *restrict dat, char *restrict str);
+static void dxf_fixup_string (Bit_Chain *restrict dat, char *restrict str,
+                              const int opts, const int dxf, const int dxfcont);
 static void dxf_CMC (Bit_Chain *restrict dat, Dwg_Color *restrict color,
                      const int dxf, const int opt);
 
@@ -85,7 +85,12 @@ static void dxf_CMC (Bit_Chain *restrict dat, Dwg_Color *restrict color,
 #define VALUE_TV(value, dxf)                                                  \
   {                                                                           \
     GROUP (dxf);                                                              \
-    dxf_fixup_string (dat, (char *)value);                                    \
+    dxf_fixup_string (dat, (char *)value, 1, dxf, dxf);                       \
+  }
+#define VALUE_TV0(value, dxf)                                                 \
+  if (dxf && value && *value) {                                               \
+    GROUP (dxf);                                                              \
+    dxf_fixup_string (dat, (char *)value, 1, dxf, dxf);                       \
   }
 // in_json writes all strings as TV, in_dxf and decode not.
 #define VALUE_TU(wstr, dxf)                                                   \
@@ -94,14 +99,13 @@ static void dxf_CMC (Bit_Chain *restrict dat, Dwg_Color *restrict color,
       {                                                                       \
         VALUE_TV (wstr, dxf);                                                 \
       }                                                                       \
-    else                                                                      \
+    else if (dxf)                                                             \
       {                                                                       \
         char *u8 = bit_convert_TU ((BITCODE_TU)wstr);                         \
         GROUP (dxf);                                                          \
         if (u8)                                                               \
           {                                                                   \
-            /* FIXME: ensure line length limits */                            \
-            dxf_fixup_string (dat, u8);                                       \
+            dxf_fixup_string (dat, u8, 1, dxf, dxf);                          \
           }                                                                   \
         else                                                                  \
           fprintf (dat->fh, "\r\n");                                          \
@@ -110,12 +114,15 @@ static void dxf_CMC (Bit_Chain *restrict dat, Dwg_Color *restrict color,
   }
 #define VALUE_TFF(str, dxf)                                                   \
   {                                                                           \
-    GROUP (dxf);                                                              \
-    fprintf (dat->fh, "%s\r\n", str);                                         \
+    if (dxf)                                                                  \
+      {                                                                       \
+        GROUP (dxf);                                                          \
+        dxf_fixup_string (dat, (char *)str, 0, dxf, dxf);                     \
+      }                                                                       \
   }
 #define VALUE_BINARY(value, size, dxf)                                        \
   {                                                                           \
-    if (value)                                                                \
+    if (value && dxf)                                                         \
       {                                                                       \
         for (unsigned long j = 0; j < (unsigned long)(size); j++)             \
           {                                                                   \
@@ -132,7 +139,7 @@ static void dxf_CMC (Bit_Chain *restrict dat, Dwg_Color *restrict color,
   }
 #define FIELD_BINARY(name, size, dxf)                                         \
   if (dxf)                                                                    \
-  VALUE_BINARY (_obj->name, size, dxf)
+    VALUE_BINARY (_obj->name, size, dxf)
 
 #define FIELD_VALUE(nam) _obj->nam
 #define ANYCODE -1
@@ -147,9 +154,11 @@ static void dxf_CMC (Bit_Chain *restrict dat, Dwg_Color *restrict color,
 // names on: 6 7 8. which else? there are more styles: plot, ...
 // rather skip unknown handles
 #define FIELD_HANDLE(nam, handle_code, dxf)                                   \
-  if (dxf != 0 && _obj->nam != NULL)                                          \
+  if (dxf != 0)                                                               \
     {                                                                         \
-      if (dxf == 6)                                                           \
+      if (!_obj->nam)                                                         \
+        fprintf (dat->fh, "%3i\r\n%lX\r\n", dxf, 0UL);                        \
+      else if (dxf == 6)                                                      \
         FIELD_HANDLE_NAME (nam, dxf, LTYPE)                                   \
       else if (dxf == 2)                                                      \
         FIELD_HANDLE_NAME (nam, dxf, BLOCK_HEADER)                            \
@@ -161,12 +170,14 @@ static void dxf_CMC (Bit_Chain *restrict dat, Dwg_Color *restrict color,
         FIELD_HANDLE_NAME (nam, dxf, LAYER)                                   \
       else if (dat->version >= R_13)                                          \
         fprintf (dat->fh, "%3i\r\n%lX\r\n", dxf,                              \
-                 _obj->nam->obj ? _obj->nam->absolute_ref : 0);               \
+                 _obj->nam->obj ? _obj->nam->absolute_ref : 0UL);             \
     }
 #define SUB_FIELD_HANDLE(o, nam, handle_code, dxf)                            \
-  if (dxf != 0 && _obj->o.nam)                                                \
+  if (dxf != 0)                                                               \
     {                                                                         \
-      if (dxf == 6)                                                           \
+      if (!_obj->o.nam)                                                       \
+        fprintf (dat->fh, "%3i\r\n%lX\r\n", dxf, 0UL);                        \
+      else if (dxf == 6)                                                      \
         SUB_FIELD_HANDLE_NAME (o, nam, dxf, LTYPE)                            \
       else if (dxf == 3)                                                      \
         SUB_FIELD_HANDLE_NAME (o, nam, dxf, DIMSTYLE)                         \
@@ -176,7 +187,7 @@ static void dxf_CMC (Bit_Chain *restrict dat, Dwg_Color *restrict color,
         SUB_FIELD_HANDLE_NAME (o, nam, dxf, LAYER)                            \
       else if (dat->version >= R_13)                                          \
         fprintf (dat->fh, "%3i\r\n%lX\r\n", dxf,                              \
-                 _obj->o.nam->obj ? _obj->o.nam->absolute_ref : 0);           \
+                 _obj->o.nam->obj ? _obj->o.nam->absolute_ref : 0UL);         \
     }
 #define FIELD_HANDLE0(nam, handle_code, dxf)                                  \
   if (_obj->nam && _obj->nam->absolute_ref)                                   \
@@ -307,7 +318,7 @@ dxf_print_rd (Bit_Chain *dat, BITCODE_RD value, int dxf)
       char _buf[128];
       int k;
       fprintf (dat->fh, "%3i\r\n", dxf);
-#ifdef IS_RELEASE
+#ifndef DEBUG_CLASSES
       if (bit_isnan (value))
         value = 0.0;
 #endif
@@ -421,6 +432,12 @@ dxf_print_rd (Bit_Chain *dat, BITCODE_RD value, int dxf)
 #define HEADER_T(nam, dxf)                                                    \
   HEADER_9 (nam);                                                             \
   VALUE_T ((char *)_obj->nam, dxf)
+#define HEADER_T0(nam, dxf)                                                   \
+  if (dxf && !bit_empty_T (dat, _obj->nam))                                   \
+    {                                                                         \
+      HEADER_9 (nam);                                                         \
+      VALUE_T ((char*)_obj->nam, dxf);                                        \
+    }
 #define HEADER_B(nam, dxf)                                                    \
   HEADER_9 (nam);                                                             \
   FIELD_B (nam, dxf)
@@ -606,6 +623,7 @@ dxf_print_rd (Bit_Chain *dat, BITCODE_RD value, int dxf)
           }                                                                   \
       }                                                                       \
   }
+#define FIELD_TV0(nam, dxf) VALUE_TV0 (_obj->nam, dxf)
 #define SUB_FIELD_BL0(o, nam, dxf)                                            \
   {                                                                           \
     if (_obj->o.nam != 0)                                                     \
@@ -1028,25 +1046,32 @@ static void dxf_CMC (Bit_Chain *restrict dat, Dwg_Color *restrict color,
       VALUE_RL (color->rgb, dxf + 420 - 62);
       if (color->flag & 2 && color->book_name)
         {
-          char name[80];
+          char name[256];
           if (IS_FROM_TU (dat))
             {
               char *u8 = bit_convert_TU ((BITCODE_TU)color->book_name);
-              strcpy (name, u8);
+              if (u8)
+                strncpy (name, u8, 127);
+              else
+                name[0] = '\0';
               free (u8);
               u8 = bit_convert_TU ((BITCODE_TU)color->name);
               if (u8)
                 {
-                  strcat (name, "$");
-                  strcpy (name, u8);
+                  if (*name)
+                    strcat (name, "$");
+                  strncat (name, u8, 127);
                   free (u8);
                 }
             }
           else
             {
-              strcpy (name, color->book_name);
-              strcat (name, "$");
-              strcpy (name, color->name);
+              strncpy (name, color->book_name, 127);
+              if (color->name)
+                {
+                  strcat (name, "$");
+                  strncat (name, color->name, 127);
+                }
             }
           VALUE_TV (name, dxf + 430 - 62);
         }
@@ -1066,53 +1091,139 @@ static void dxf_CMC (Bit_Chain *restrict dat, Dwg_Color *restrict color,
     }
 }
 
+/* fixme: shift-jis decoding
+"\M+182B1\M+182CC\M+1907D\M+19867\M+182CD\M+18354\M+18393\M+18376\M+1838B\M+182C5\M+182B7\M+18142\M+18ED0\M+193E0\M+182CC\M+18B4B\M+18A69\M+182E2\M+18376\M+1838D\M+18362\M+1835E\M+182CC\M+18F6F\M+197CD\M+194CD\M+188CD\M+182C9\M+18D87\M+182ED\M+182B9\M+182C4\M+1934B\M+19396\M+182C9\M+195CF\M+18D58\M+182B5\M+182C4\M+182B2\M+19798\M+19770\M+182AD\M+182BE\M+182B3\M+182A2\M+18142"
+=>
+"\U+3053\U+306E\U+56F3\U+67A0\U+306F\U+30B5\U+30F3\U+30D7\U+30EB\U+3067\U+3059\U+3002\U+793E\U+5185\U+306E\U+898F\U+683C\U+3084\U+30D7\U+30ED\U+30C3\U+30BF\U+306E\U+51FA\U+529B\U+7BC4\U+56F2\U+306B\U+5408\U+308F\U+305B\U+3066\U+9069\U+5F53\U+306B\U+5909\U+66F4\U+3057\U+3066\U+3054\U+5229\U+7528\U+304F\U+3060\U+3055\U+3044\U+3002"
+*/
 static char *
-cquote (char *restrict dest, const char *restrict src, const int len)
+cquote (char *restrict dest, const int len, const char *restrict src)
 {
   char c;
   char *d = dest;
-  const char* endp = dest + len;
+  const char* dend = dest + len;
+  const char* send = src + strlen(src);
   char *s = (char *)src;
-  while ((c = *s++))
+  while ((s < send) && (c = *s++) && dest < dend)
     {
-      if (dest >= endp)
-        {
-          *dest = 0;
-          return d;
-        }
-      if (c == '\n' && dest+1 < endp)
+      if (c == '\n' && dest+1 < dend)
         {
           *dest++ = '^';
           *dest++ = 'J';
         }
-      else if (c == '\r' && dest+1 < endp)
+      else if (c == '\r' && dest+1 < dend)
         {
           *dest++ = '^';
           *dest++ = 'M';
         }
+      // convert shiftjis \M+1xxxx to \U+xxxx
+      else if (c == '\\' && dest+7 < dend && memBEGINc (s, "M+1"))
+        { // e.g. \M+1(8140) => \U+3000, 82a0 => 3042
+          uint32_t x;
+          sscanf (&s[3], "%4X", &x);
+          // just convert a small subset, Hiragana + Katakana letters
+          // see https://www.unicode.org/Public/MAPPINGS/OBSOLETE/EASTASIA/JIS/SHIFTJIS.TXT
+          if (x < 0x829f) // < Hiragana: 8140 -> 3000: FULLWIDTH LATIN LETTER
+            x -= 0x5140;
+          else if (x >= 0x889f) {    // CJK
+            LOG_WARN ("Unsupported \\M+1%04X shift-jis character", x);
+            x -= (0x889f - 0x404c); // not really
+          }
+          else if (x >= 0x839f)     // > Katakana: Greek
+            x -= (0x839f - 0x391);
+          else
+            x -= 0x525e; // our safe range of Hiragana + Katakana letters
+          if (x < 0x10100)
+            {
+              snprintf (dest, dend - dest, "\\U+%04X", x);
+              dest += 7;
+              s += 7;
+            }
+          else
+            {
+              LOG_ERROR ("Invalid shift-jis sequence %s", s-1);
+              s += 3;
+            }
+        }
       else
         *dest++ = c;
     }
-  if (dest < endp)
-    *dest = 0; // add final delim, skipped above
+  d[len - 1] = '\0'; // add final delim, skipped above
   return d;
 }
 
-/* \n => ^J */
+/* If opts 1:
+     quote \n => ^J
+     \M+xxxxx => \U+XXXX (shift-jis)
+   Splits overlong (len>255) lines into dxf 3 chunks with group 1
+ */
 static void
-dxf_fixup_string (Bit_Chain *restrict dat, char *restrict str)
+dxf_fixup_string (Bit_Chain *restrict dat, char *restrict str,
+                  const int opts, const int dxf, const int dxfcont)
 {
-  if (str)
+  if (str && *str)
     {
-      if (strchr (str, '\n') || strchr (str, '\r'))
+      if (opts && (strchr (str, '\n') || strchr (str, '\r') || strstr (str, "\\M+1")))
         {
-          const int len = 2 * strlen (str) + 1;
-          char *_buf = (char *)alloca (len);
-          fprintf (dat->fh, "%s\r\n", cquote (_buf, str, len));
+          const int origlen = strlen (str);
+          int len = (2 * origlen) + 1;
+          char *_buf;
+          if (len > 1024)
+            {
+              fprintf (dat->fh, "\r\n");
+              LOG_ERROR ("Overlarge DXF string, len=%d", origlen);
+              return;
+            }
+          _buf = (char *)alloca (len);
+          if (!_buf)
+            {
+              fprintf (dat->fh, "\r\n");
+              LOG_ERROR ("Out of stack memory");
+              return;
+            }
+          _buf[len - 1] = '\0';
+          _buf = cquote (_buf, len, str);
+          if (!_buf)
+            {
+              fprintf (dat->fh, "\r\n");
+              LOG_ERROR ("Out of stack");
+              return;
+            }
+          len = strlen (_buf);
+          if (len > 255 && dxf == 1)
+            {
+              // GROUP 1 already printed
+              while (len > 0)
+                {
+                  fprintf (dat->fh, "%.*s\r\n", len > 255 ? 255 : len, _buf);
+                  len -= 255;
+                  _buf += 255;
+                  if (len > 0)
+                    fprintf (dat->fh, "%3d\r\n", dxfcont);
+                }
+            }
+          else
+            fprintf (dat->fh, "%s\r\n", _buf);
           freea (_buf);
         }
       else
-        fprintf (dat->fh, "%s\r\n", str);
+        {
+          int len = strlen (str);
+          if (len > 255 && dxf == 1)
+            {
+              // GROUP 1 already printed
+              while (len > 0)
+                {
+                  fprintf (dat->fh, "%.*s\r\n", len > 255 ? 255 : len, str);
+                  len -= 255;
+                  str += 255;
+                  if (len > 0)
+                    fprintf (dat->fh, "  3\r\n");
+                }
+            }
+          else
+            fprintf (dat->fh, "%s\r\n", str);
+        }
     }
   else
     fprintf (dat->fh, "\r\n");
@@ -1142,21 +1253,23 @@ dxf_write_eed (Bit_Chain *restrict dat, const Dwg_Object_Object *restrict obj)
           switch (data->code)
             {
             case 0:
-              if (IS_FROM_TU (dat))
+              if (!data->u.eed_0.length)
+                fprintf (dat->fh, "1000\r\n\r\n");
+              else if (data->u.eed_0.is_tu)
                 VALUE_TU (data->u.eed_0_r2007.string, 1000)
               else
                 VALUE_TV (data->u.eed_0.string, 1000)
               break;
             case 2:
-              if (data->u.eed_2.byte)
+              if (data->u.eed_2.close)
                 VALUE_TFF ("}", 1002)
               else
                 VALUE_TFF ("{", 1002)
               break;
             case 3:
               GROUP (dxf);
-              fprintf (dat->fh, "%9li\r\n", (long)data->u.eed_3.layer);
-              //VALUE_RL (data->u.eed_3.layer, dxf);
+              fprintf (dat->fh, "%9lu\r\n", (unsigned long)data->u.eed_3.layer);
+              //VALUE_RLL (data->u.eed_3.layer, dxf);
               break;
             case 4: VALUE_BINARY (data->u.eed_4.data, data->u.eed_4.length, dxf); break;
             case 5: VALUE_H (data->u.eed_5.entity, dxf); break; // not in DXF
@@ -1456,7 +1569,10 @@ dxf_cvt_blockname (Bit_Chain *restrict dat, char *restrict name, const int dxf)
         fprintf (dat->fh, "%3i\r\n%s\r\n", dxf, name);
     }
   if (IS_FROM_TU (dat))
-    free (name);
+    {
+      free (name);
+      name = NULL;
+    }
 }
 
 #define START_OBJECT_HANDLE_STREAM
@@ -1548,15 +1664,14 @@ EXPORT char *
 dwg_encrypt_SAT1 (BITCODE_BL blocksize, BITCODE_RC *restrict acis_data,
                   int *restrict acis_data_idx)
 {
-  BITCODE_RC* encr_sat_data = (BITCODE_RC*)calloc (blocksize, 1);
-  int i = *acis_data_idx;
-  int j;
-  for (j = 0; j < (int)blocksize; j++)
+  BITCODE_RC* encr_sat_data = (BITCODE_RC*)calloc (blocksize + 1, 1);
+  int i;
+  for (i = 0; i < (int)blocksize; i++)
     {
-      if (acis_data[j] <= 32)
-        encr_sat_data[i++] = acis_data[j];
+      if (acis_data[i] <= 32)
+        encr_sat_data[i] = acis_data[i];
       else
-        encr_sat_data[i++] = 159 - acis_data[j];
+        encr_sat_data[i] = 159 - acis_data[i];
     }
   *acis_data_idx = i;
   return (char*)encr_sat_data;
@@ -1709,17 +1824,18 @@ dwg_convert_SAB_to_SAT1 (Dwg_Entity_3DSOLID *restrict _obj)
 {
   Bit_Chain dest = { NULL, 0, 0, 0 };
   Bit_Chain src = { NULL, 0, 0, 0 };
-  unsigned int i = 0, num_blocks = 2, size = 0;
+  unsigned int i = 0, num_blocks = 2;
   BITCODE_RC c;
   char *p = (char*)&_obj->acis_data[15];
   //char *end, *dest, *enddest;
+  long unsigned int size;
   BITCODE_RL version, num_records, num_entities, has_history;
   //char *product_string, *acis_version, *date;
   BITCODE_RD num_mm_units, resabs, resnor;
   // Note that r2013+ has ASM data instead.
   // const char enddata[] = "\016\003End\016\002of\016\004ACIS\r\004data";
   // const char enddata1[] = "\016\003End\016\002of\016\003ASM\r\004data";
-  int first = 1;
+  int l = 0;
   int forward = 0;
   int skip_hist = 0;
   char act_record [80];
@@ -1749,6 +1865,8 @@ dwg_convert_SAB_to_SAT1 (Dwg_Entity_3DSOLID *restrict _obj)
   if (!memBEGINc ((char*)_obj->acis_data, "ACIS BinaryFile"))
     {
       LOG_ERROR ("acis_data is not a SAB 2 'ACIS BinaryFile'");
+      _obj->num_blocks = 0;
+      _obj->encr_sat_data[0] = NULL;
       return 1;
     }
   //dest = &_obj->encr_sat_data[0][0];
@@ -1768,31 +1886,55 @@ dwg_convert_SAB_to_SAT1 (Dwg_Entity_3DSOLID *restrict _obj)
 #define SAB_RD1()                                                       \
   {                                                                     \
     double f = bit_read_RD (&src);                                      \
-    if (dest.byte + 16 >= dest.size)                                     \
+    int s;                                                              \
+    if (dest.byte + 16 >= dest.size)                                    \
       bit_chain_alloc (&dest);                                          \
-    dest.byte += sprintf ((char*)&dest.chain[dest.byte], "%g ", f);     \
+    if (l + 16 > 255)                                                   \
+      {                                                                 \
+        bit_write_TF (&dest, (BITCODE_TF) "\n", 1);                     \
+        LOG_TRACE ("Split overlong SAT line\n");                        \
+        l = 0;                                                          \
+      }                                                                 \
+    s = sprintf ((char*)&dest.chain[dest.byte], "%g ", f);              \
+    dest.byte += s; l += s;                                             \
     LOG_TRACE ("%g ", f);                                               \
   }
 // key is ignored here. header only
 #define SAB_T(key)                                                      \
   {                                                                     \
-    int len;                                                            \
+    int len, s;                                                         \
     c = bit_read_RC (&src);                                             \
     LOG_HANDLE (#key " [%d] ", c)                                       \
     len = bit_read_RC (&src);                                           \
-    dest.byte += sprintf ((char*)&dest.chain[dest.byte], "%d ", len);   \
+    s = sprintf ((char*)&dest.chain[dest.byte], "%d ", len);            \
+    dest.byte += s; l += s;                                             \
     LOG_TRACE ("%d %.*s ", len, len, &src.chain[src.byte]);             \
     bit_write_TF (&dest, &src.chain[src.byte], len);                    \
     bit_write_TF (&dest, (BITCODE_TF) " ", 1);                          \
+    l += len + 1;                                                       \
     src.byte += len;                                                    \
   }
 #define SAB_TF(x)                                                       \
+  if (l + sizeof(x) > 255)                                              \
+    {                                                                   \
+      bit_write_TF (&dest, (BITCODE_TF) "\n", 1);                       \
+      LOG_TRACE ("Split overlong SAT line\n");                          \
+      l = 0;                                                            \
+    }                                                                   \
   bit_write_TF (&dest, (BITCODE_TF) x, sizeof (x) - 1);                 \
   bit_write_TF (&dest, (BITCODE_TF) " ", 1);                            \
+  l += sizeof (x);                                                      \
   LOG_TRACE ("%s ", x)
 #define SAB_TV(x)                                                       \
+  if (l + strlen (x) > 255)                                             \
+    {                                                                   \
+      bit_write_TF (&dest, (BITCODE_TF) "\n", 1);                       \
+      LOG_TRACE ("Split overlong SAT line\n");                          \
+      l = 0;                                                            \
+    }                                                                   \
   bit_write_TF (&dest, (BITCODE_TF) x, strlen (x));                     \
   bit_write_TF (&dest, (BITCODE_TF) " ", 1);                            \
+  l += strlen (x) + 1;                                                  \
   LOG_TRACE ("%s ", x)
 
   // create the two vectors encr_sat_data[] and block_size[] on the fly from the SAB
@@ -1847,7 +1989,6 @@ dwg_convert_SAB_to_SAT1 (Dwg_Entity_3DSOLID *restrict _obj)
         {
         // check size, realloc encr_sat_data[i], set dest
         case 17:   //  # end of record
-          first = 1;
           forward = 0;
           if (dest.byte + 2 >= dest.size)
             bit_chain_alloc (&dest);
@@ -1864,14 +2005,15 @@ dwg_convert_SAB_to_SAT1 (Dwg_Entity_3DSOLID *restrict _obj)
             }
           else
             {
-              dest.byte += sprintf ((char*)&dest.chain[dest.byte], "#\n");
+              int s = sprintf ((char*)&dest.chain[dest.byte], "#\n");
+              dest.byte += s; l += s;
               LOG_TRACE ("#\n");
             }
           //i = new_encr_sat_data_line (_obj, &dest, i);
+          l = 0;
           skip_hist = 0;
           break;
         case 13:   // ident
-          first = 1;
           _obj->encr_sat_data[i] = (char*)dest.chain;
           // fallthru
         case 7:  // char len
@@ -1882,7 +2024,8 @@ dwg_convert_SAB_to_SAT1 (Dwg_Entity_3DSOLID *restrict _obj)
               bit_chain_alloc (&dest);
             if (c == 7 && i < 3)
               {
-                dest.byte += sprintf ((char*)&dest.chain[dest.byte], "%d ", len);
+                int s = sprintf ((char*)&dest.chain[dest.byte], "%d ", len);
+                dest.byte += s; l += s;
                 LOG_TRACE ("%d ", len);
               }
             LOG_TRACE ("%.*s%s", len, &src.chain[src.byte], c == 14 ? "-" : " ");
@@ -1892,6 +2035,7 @@ dwg_convert_SAB_to_SAT1 (Dwg_Entity_3DSOLID *restrict _obj)
             if (len == 3 && c == 14 && !memcmp (&src.chain[src.byte], "ASM", 3))
               {
                 LOG_TRACE ("=>ACIS-");
+                skip_hist = 1;
                 bit_write_TF (&dest, (BITCODE_TF)"ACIS", 4);
               }
             else
@@ -1918,24 +2062,53 @@ dwg_convert_SAB_to_SAT1 (Dwg_Entity_3DSOLID *restrict _obj)
               bit_write_TF (&dest, (BITCODE_TF)"-", 1);
             else
               bit_write_TF (&dest, (BITCODE_TF)" ", 1);
+            l++;
             break;
           }
         case 8:  // short len
           {
             int len = bit_read_RS (&src);
+            if (src.byte + len >= src.size)
+              {
+                LOG_ERROR ("Invalid SAB");
+                bit_chain_free (&dest);
+                _obj->num_blocks = 0;
+                _obj->encr_sat_data[0] = NULL;
+                return 1;
+              }
+            if (dest.byte + len + 1 >= dest.size)
+              bit_chain_alloc (&dest);
             LOG_TRACE ("%.*s%s", len, &src.chain[src.byte], " ")
             bit_write_TF (&dest, &src.chain[src.byte], len);
             src.byte += len;
             bit_write_TF (&dest, (BITCODE_TF)" ", 1);
+            l += len + 1;
             break;
           }
         case 9:  // long len
           {
             int len = bit_read_RL (&src);
+            if (src.byte + len >= src.size)
+              {
+                LOG_ERROR ("Invalid SAB");
+                bit_chain_free (&dest);
+                _obj->num_blocks = 0;
+                _obj->encr_sat_data[0] = NULL;
+                return 1;
+              }
+            if (dest.byte + len + 1 >= dest.size)
+              bit_chain_alloc (&dest);
+            if (l + len > 255)
+              {
+                bit_write_TF (&dest, (BITCODE_TF) "\n", 1);
+                LOG_TRACE ("Split overlong SAT line\n");
+                l = 0;
+              }
             LOG_TRACE ("%.*s%s", len, &src.chain[src.byte], " ")
             bit_write_TF (&dest, &src.chain[src.byte], len);
             src.byte += len;
             bit_write_TF (&dest, (BITCODE_TF)" ", 1);
+            l += len + 1;
             break;
           }
         case 10: // 0 byte TRUE
@@ -1960,48 +2133,76 @@ dwg_convert_SAB_to_SAT1 (Dwg_Entity_3DSOLID *restrict _obj)
           break;
         case 2: // char constant
           {
-            int8_t l = (int8_t)bit_read_RC (&src);
+            int s;
+            int8_t ll = (int8_t)bit_read_RC (&src);
             if (dest.byte + 4 >= dest.size)
               bit_chain_alloc (&dest);
-            dest.byte += sprintf ((char*)&dest.chain[dest.byte], "%" PRId8 " ", l);
-            LOG_TRACE ("%" PRId8 " ", l)
+            if (l + 3 > 255)
+              {
+                bit_write_TF (&dest, (BITCODE_TF) "\n", 1);
+                LOG_TRACE ("Split overlong SAT line\n");
+                l = 0;
+              }
+            s = sprintf ((char*)&dest.chain[dest.byte], "%" PRId8 " ", ll);
+            dest.byte += s; l += s;
+            LOG_TRACE ("%" PRId8 " ", ll)
           }
           break;
         case 3: // short constant
           {
-            int16_t l = (int16_t)bit_read_RS (&src);
+            int s;
+            int16_t ll = (int16_t)bit_read_RS (&src);
             if (dest.byte + 8 >= dest.size)
               bit_chain_alloc (&dest);
-            dest.byte += sprintf ((char*)&dest.chain[dest.byte], "%" PRId16 " ", l);
-            LOG_TRACE ("%" PRId16 " ", l)
+            s = sprintf ((char*)&dest.chain[dest.byte], "%" PRId16 " ", ll);
+            dest.byte += s; l += s;
+            LOG_TRACE ("%" PRId16 " ", ll)
           }
           break;
         case 4:  // long constant
-        case 21: // enum <ident>
+        case 21: // enum value. See GH jmplonka/InventorLoader:Acis.py
           {
-            BITCODE_RLd l = (BITCODE_RLd)bit_read_RL (&src);
-            if (dest.byte + 8 >= dest.size)
+            int s;
+            BITCODE_RLd ll = (BITCODE_RLd)bit_read_RL (&src);
+            if (dest.byte + 16 >= dest.size)
               bit_chain_alloc (&dest);
-            dest.byte += sprintf ((char*)&dest.chain[dest.byte], "$%" PRId32 " ", l);
-            LOG_TRACE ("$%" PRId32 " ", l)
+            s = sprintf ((char*)&dest.chain[dest.byte], "$%" PRId32 " ", ll);
+            dest.byte += s; l += s;
+            LOG_TRACE ("$%" PRId32 " ", ll)
           }
           break;
         case 5: // float constant
           {
+            int s;
             float f = bit_read_RL (&src);
             if (dest.byte + 16 >= dest.size)
               bit_chain_alloc (&dest);
-            dest.byte += sprintf ((char*)&dest.chain[dest.byte], "%g ", (double)f);
+            if (l + 16 > 255)
+              {
+                bit_write_TF (&dest, (BITCODE_TF) "\n", 1);
+                LOG_TRACE ("Split overlong SAT line\n");
+                l = 0;
+              }
+            s = sprintf ((char*)&dest.chain[dest.byte], "%g ", (double)f);
+            dest.byte += s; l += s;
             LOG_TRACE ("%g ", (double)f)
           }
           break;
         case 12: // 4 byte pointer index
           {
-            BITCODE_RLd l = (BITCODE_RLd)bit_read_RL (&src);
-            if (dest.byte + 8 >= dest.size)
+            int s;
+            BITCODE_RLd ll = (BITCODE_RLd)bit_read_RL (&src);
+            if (dest.byte + 16 >= dest.size)
               bit_chain_alloc (&dest);
-            dest.byte += sprintf ((char*)&dest.chain[dest.byte], "$%" PRId32 " ", l);
-            LOG_TRACE ("$%" PRId32 " ", l)
+            if (l + 6 > 255)
+              {
+                bit_write_TF (&dest, (BITCODE_TF) "\n", 1);
+                LOG_TRACE ("Split overlong SAT line\n");
+                l = 0;
+              }
+            s = sprintf ((char*)&dest.chain[dest.byte], "$%" PRId32 " ", ll);
+            dest.byte += s; l += s;
+            LOG_TRACE ("$%" PRId32 " ", ll)
           }
           break;
         case 19: // 3x double-float position
@@ -2012,8 +2213,25 @@ dwg_convert_SAB_to_SAT1 (Dwg_Entity_3DSOLID *restrict _obj)
         case 6:  // 8 byte double-float, e.g. in the 2nd header line
           SAB_RD1();
           break;
-        //case 21:  // enum <identifier>
+        //case 22:  // U-V-Vector
         //  break;
+        case 23:  // int64
+          {
+            int s;
+            int64_t i64 = (int64_t)bit_read_RLL (&src);
+            if (dest.byte + 16 >= dest.size)
+              bit_chain_alloc (&dest);
+            if (l + 16 > 255)
+              {
+                bit_write_TF (&dest, (BITCODE_TF) "\n", 1);
+                LOG_TRACE ("Split overlong SAT line\n");
+                l = 0;
+              }
+            s = sprintf ((char*)&dest.chain[dest.byte], "$%" PRId64 " ", i64);
+            dest.byte += s; l += s;
+            LOG_TRACE ("$%" PRId64 " ", i64)
+          }
+          break;
         default:
           LOG_ERROR ("Unknown SAB tag %d", c);
         }
@@ -2023,10 +2241,39 @@ dwg_convert_SAB_to_SAT1 (Dwg_Entity_3DSOLID *restrict _obj)
   //if (c != 17) // last line didn't end with #, but End-of-ACIS-data or End-of-ASM-data
   //  i = new_encr_sat_data_line (_obj, &dest, i);
   num_blocks = _obj->num_blocks = 1;
+  // Nope, keep it. Teigha always adds it, ASM not.
+  //if (strEQc((char*)&dest.chain[dest.byte-17], "End-of-ACIS-data "))
+  //  dest.byte -= 17;
   bit_write_TF (&dest, (BITCODE_TF)"\n", 1);
-  _obj->encr_sat_data[i] = calloc (dest.byte, 1); // shrink it
-  memcpy (_obj->encr_sat_data[i], dest.chain, dest.byte);
-  _obj->block_size[i] = dest.byte;
+  size = dest.byte; // total size
+  {
+    unsigned long off = 0;
+    while (size > 4096)
+      { // chunks of 4096
+        if (i >= num_blocks) {
+          _obj->block_size = realloc (_obj->block_size, (i + 2) * sizeof (BITCODE_BL));
+          _obj->encr_sat_data = realloc (_obj->encr_sat_data, (i + 1) * sizeof (char**));
+          num_blocks = i + 1;
+        }
+        _obj->encr_sat_data[i] = calloc (4096, 1);
+        memcpy (_obj->encr_sat_data[i], &dest.chain[off], 4096);
+        _obj->block_size[i] = 4096;
+        LOG_TRACE ("block_size[%d] = 4096\n", i);
+        i++;
+        size -= 4096;
+        off += 4096;
+      }
+    // and the smaller rest
+    if (i >= num_blocks) {
+      _obj->block_size = realloc (_obj->block_size, (i + 2) * sizeof (BITCODE_BL));
+      _obj->encr_sat_data = realloc (_obj->encr_sat_data, (i + 1) * sizeof (char**));
+      num_blocks = i + 1;
+    }
+    _obj->encr_sat_data[i] = calloc (size + 1, 1); // shrink it
+    memcpy (_obj->encr_sat_data[i], &dest.chain[off], size);
+    _obj->block_size[i] = size;
+    LOG_TRACE ("block_size[%d] = %lu\n", i, size);
+  }
   bit_chain_free (&dest);
   LOG_TRACE ("\n");
   _obj->acis_empty = 0;
@@ -2034,8 +2281,38 @@ dwg_convert_SAB_to_SAT1 (Dwg_Entity_3DSOLID *restrict _obj)
 
   if (i + 2 >= num_blocks)
     _obj->block_size = realloc (_obj->block_size, (i + 2) * sizeof (BITCODE_BL));
+  _obj->num_blocks = i;
   _obj->block_size[i + 1] = 0;
   return 0;
+}
+
+/* Add history_id for old version 1 SAT if there's one */
+static void
+dxf_check_history_id (Bit_Chain *restrict dat, const Dwg_Object *restrict obj,
+                      Dwg_Entity_3DSOLID *restrict _obj)
+{
+  if (!_obj->history_id || !_obj->history_id->absolute_ref)
+    {
+      Dwg_Data *dwg = obj->parent;
+      Dwg_Handle *hdl = NULL;
+      if (_obj->history_id)
+        { /* Avoid NULL HDL */
+          Dwg_Object *o = dwg_ref_object (dwg, _obj->history_id);
+          if (o)
+            hdl = &o->handle;
+        }
+      if (!hdl)
+        /* FIXME Just take the first HISTORY_CLASS
+           TODO Check HISTORY_CLASS.owner (2, 360) */
+        hdl = dwg_find_first_type_handle (dwg, DWG_TYPE_ACSH_HISTORY_CLASS);
+      if (hdl)
+        _obj->history_id = dwg_add_handleref (dwg, 4, hdl->value, obj);
+      if (_obj->history_id)
+        LOG_TRACE ("Empty %s.history_id => " FORMAT_REF "\n", obj->name,
+                  ARGS_REF (_obj->history_id))
+      else
+        LOG_WARN ("Empty %s.history_id\n", obj->name)
+    }
 }
 
 static int
@@ -2059,9 +2336,9 @@ dxf_3dsolid (Bit_Chain *restrict dat, const Dwg_Object *restrict obj,
           for (i = 0; i < FIELD_VALUE (num_blocks); i++)
             {
               int idx = 0; // here idx is just local, always starting at 0. ignored
-              char *ptr
-                  = dwg_encrypt_SAT1 (_obj->block_size[i],
-                                  (BITCODE_RC *)_obj->encr_sat_data[i], &idx);
+              char *ptr = dwg_encrypt_SAT1 (
+                  _obj->block_size[i], (BITCODE_RC *)_obj->encr_sat_data[i],
+                  &idx);
 
               free (_obj->encr_sat_data[i]);
               _obj->encr_sat_data[i] = ptr;
@@ -2073,22 +2350,21 @@ dxf_3dsolid (Bit_Chain *restrict dat, const Dwg_Object *restrict obj,
         {
           char *s = FIELD_VALUE (encr_sat_data[i]);
           // FIXME
+          // only DXF 1, always keep len <255
           //int len = _obj->_dxf_sab_converted ? FIELD_VALUE (block_size[i]) : strlen (s);
           int len = FIELD_VALUE (block_size[i]);
-          // DXF 1 + 3 if >255
           while (len > 0)
             {
               char *n = strchr (s, '\n');
               int l = len > 255 ? 255 : len;
               char *caret = strchr (s, '^');
               if (n && (n - s < len))
-                l = n - s;
+                {
+                  l = n - s;
+                }
               if (l)
                 {
-                  if (l < 255)
-                    GROUP (1);
-                  else
-                    GROUP (3);
+                  GROUP (1);
                   // replace "^" by "^ "
                   while (caret && caret < n)
                     {
@@ -2098,8 +2374,10 @@ dxf_3dsolid (Bit_Chain *restrict dat, const Dwg_Object *restrict obj,
                       l -= lc;
                       len -= lc;
                       s += lc;
-                      caret = strchr (s, '^'); // looks safe
+                      caret = l > 1 ? strchr (s, '^') : NULL;
                     }
+                  if (l > 255)
+                    LOG_ERROR ("Overlong SAT line \"%s\" len=%d", s, l)
                   if (s[l - 1] == '\r')
                     fprintf (dat->fh, "%.*s\n", l, s);
                   else
@@ -2116,6 +2394,7 @@ dxf_3dsolid (Bit_Chain *restrict dat, const Dwg_Object *restrict obj,
             }
         }
     }
+  dxf_check_history_id (dat, obj, _obj);
   // the rest is done in COMMON_3DSOLID in the spec.
   return error;
 }
@@ -2149,11 +2428,12 @@ dwg_dxf_variable_type (const Dwg_Data *restrict dwg, Bit_Chain *restrict dat,
           LOG_WARN ("Skip %s\n", klass->dxfname)
           return DWG_ERR_UNHANDLEDCLASS;
         }
-      // keep only: DICTIONARYVAR, MATERIAL, RASTERVARIABLES, IMAGEDEF_REACTOR, XRECORD
+      // keep only: DICTIONARYVAR, MATERIAL, RASTERVARIABLES, IMAGEDEF_REACTOR, XRECORD, IDBUFFER
       else if (!is_entity &&
                strNEc (klass->dxfname, "DICTIONARYVAR") &&
                strNEc (klass->dxfname, "MATERIAL") &&
                strNEc (klass->dxfname, "RASTERVARIABLES") &&
+               strNEc (klass->dxfname, "IDBUFFER") &&
                strNEc (klass->dxfname, "IMAGEDEF_REACTOR") &&
                strNEc (klass->dxfname, "XRECORD"))
         {
@@ -2184,9 +2464,9 @@ dwg_dxf_variable_type (const Dwg_Data *restrict dwg, Bit_Chain *restrict dat,
                                                                               \
     VERSIONS (R_13, R_2000)                                                   \
     {                                                                         \
-      Dwg_Object *last_vertex = _obj->last_vertex->obj;                       \
+      Dwg_Object *last_vertex = _obj->last_vertex ? _obj->last_vertex->obj : NULL; \
       Dwg_Object *o = _obj->first_vertex ? _obj->first_vertex->obj : NULL;    \
-      if (!o)                                                                 \
+      if (!o || !last_vertex)                                                 \
         return DWG_ERR_INVALIDHANDLE;                                         \
       if (o->fixedtype == DWG_TYPE_VERTEX_##token)                            \
         error |= dwg_dxf_VERTEX_##token (dat, o);                             \
@@ -2596,7 +2876,7 @@ dxf_format (int code)
     return "%6i";
   if (code == 1071)
     return "%9li"; // int32_t
-  if (code == 1002) // RC
+  if (code == 1002) // string => RC
     return "%6i";
   if (code == 1003) // RL layer
     return "%9li";
@@ -2783,10 +3063,10 @@ dxf_tables_write (Bit_Chain *restrict dat, Dwg_Data *restrict dwg)
   SECTION (TABLES);
   SINCE (R_9c1)
   {
-    Dwg_Object_VPORT_CONTROL *_ctrl = &dwg->vport_control;
-    Dwg_Object *ctrl = &dwg->object[_ctrl->objid];
-    if (ctrl && ctrl->fixedtype == DWG_TYPE_VPORT_CONTROL)
+    Dwg_Object *ctrl = dwg_get_first_object (dwg, DWG_TYPE_VPORT_CONTROL);
+    if (ctrl && ctrl->tio.object && ctrl->tio.object->tio.VPORT_CONTROL)
       {
+        Dwg_Object_VPORT_CONTROL *_ctrl = ctrl->tio.object->tio.VPORT_CONTROL;
         Dwg_Object *obj = ctrl;
         TABLE (VPORT);
         // add handle 5 here at first
@@ -2800,8 +3080,12 @@ dxf_tables_write (Bit_Chain *restrict dat, Dwg_Data *restrict dwg)
             VALUE_TV ("DbSaveVer", 1000);
             VALUE_RS (dwg->header.dwg_version, 1071); // so that 69 is R_2018
           }
-        for (i = 0; i < dwg->vport_control.num_entries; i++)
+        for (i = 0; i < _ctrl->num_entries; i++)
           {
+            if (!_ctrl->entries)
+              break;
+            if (!_ctrl->entries[i])
+              continue;
             obj = dwg_ref_object (dwg, _ctrl->entries[i]);
             if (obj && obj->type == DWG_TYPE_VPORT)
               {
@@ -2814,10 +3098,10 @@ dxf_tables_write (Bit_Chain *restrict dat, Dwg_Data *restrict dwg)
       }
   }
   {
-    Dwg_Object_LTYPE_CONTROL *_ctrl = &dwg->ltype_control;
-    Dwg_Object *ctrl = &dwg->object[_ctrl->objid];
-    if (ctrl && ctrl->fixedtype == DWG_TYPE_LTYPE_CONTROL)
+    Dwg_Object *ctrl = dwg_get_first_object (dwg, DWG_TYPE_LTYPE_CONTROL);
+    if (ctrl && ctrl->tio.object && ctrl->tio.object->tio.LTYPE_CONTROL)
       {
+        Dwg_Object_LTYPE_CONTROL *_ctrl = ctrl->tio.object->tio.LTYPE_CONTROL;
         Dwg_Object *obj = ctrl;
         TABLE (LTYPE);
         COMMON_TABLE_CONTROL_FLAGS;
@@ -2834,8 +3118,12 @@ dxf_tables_write (Bit_Chain *restrict dat, Dwg_Data *restrict dwg)
             error |= dwg_dxf_LTYPE (dat, obj);
           }
         // here LTYPE_CONTINUOUS is already included
-        for (i = 0; i < dwg->ltype_control.num_entries; i++)
+        for (i = 0; i < _ctrl->num_entries; i++)
           {
+            if (!_ctrl->entries)
+              break;
+            if (!_ctrl->entries[i])
+              continue;
             obj = dwg_ref_object (dwg, _ctrl->entries[i]);
             if (obj && obj->type == DWG_TYPE_LTYPE)
               {
@@ -2846,16 +3134,20 @@ dxf_tables_write (Bit_Chain *restrict dat, Dwg_Data *restrict dwg)
       }
   }
   {
-    Dwg_Object_LAYER_CONTROL *_ctrl = &dwg->layer_control;
-    Dwg_Object *ctrl = &dwg->object[_ctrl->objid];
-    if (ctrl && ctrl->fixedtype == DWG_TYPE_LAYER_CONTROL)
+    Dwg_Object *ctrl = dwg_get_first_object (dwg, DWG_TYPE_LAYER_CONTROL);
+    if (ctrl && ctrl->tio.object && ctrl->tio.object->tio.LAYER_CONTROL)
       {
+        Dwg_Object_LAYER_CONTROL *_ctrl = ctrl->tio.object->tio.LAYER_CONTROL;
         Dwg_Object *obj = ctrl;
         TABLE (LAYER);
         COMMON_TABLE_CONTROL_FLAGS;
         error |= dwg_dxf_LAYER_CONTROL (dat, ctrl);
-        for (i = 0; i < dwg->layer_control.num_entries; i++)
+        for (i = 0; i < _ctrl->num_entries; i++)
           {
+            if (!_ctrl->entries)
+              break;
+            if (!_ctrl->entries[i])
+              continue;
             obj = dwg_ref_object (dwg, _ctrl->entries[i]);
             if (obj && obj->type == DWG_TYPE_LAYER)
               error |= dwg_dxf_LAYER (dat, obj);
@@ -2866,16 +3158,20 @@ dxf_tables_write (Bit_Chain *restrict dat, Dwg_Data *restrict dwg)
       }
   }
   {
-    Dwg_Object_STYLE_CONTROL *_ctrl = &dwg->style_control;
-    Dwg_Object *ctrl = &dwg->object[_ctrl->objid];
-    if (ctrl && ctrl->fixedtype == DWG_TYPE_STYLE_CONTROL)
+    Dwg_Object *ctrl = dwg_get_first_object (dwg, DWG_TYPE_STYLE_CONTROL);
+    if (ctrl && ctrl->tio.object && ctrl->tio.object->tio.STYLE_CONTROL)
       {
+        Dwg_Object_STYLE_CONTROL *_ctrl = ctrl->tio.object->tio.STYLE_CONTROL;
         Dwg_Object *obj = ctrl;
         TABLE (STYLE);
         COMMON_TABLE_CONTROL_FLAGS;
         error |= dwg_dxf_STYLE_CONTROL (dat, ctrl);
-        for (i = 0; i < dwg->style_control.num_entries; i++)
+        for (i = 0; i < _ctrl->num_entries; i++)
           {
+            if (!_ctrl->entries)
+              break;
+            if (!_ctrl->entries[i])
+              continue;
             obj = dwg_ref_object (dwg, _ctrl->entries[i]);
             if (obj && obj->type == DWG_TYPE_STYLE)
               {
@@ -2886,16 +3182,20 @@ dxf_tables_write (Bit_Chain *restrict dat, Dwg_Data *restrict dwg)
       }
   }
   {
-    Dwg_Object_VIEW_CONTROL *_ctrl = &dwg->view_control;
-    Dwg_Object *ctrl = &dwg->object[_ctrl->objid];
-    if (ctrl && ctrl->fixedtype == DWG_TYPE_VIEW_CONTROL)
+    Dwg_Object *ctrl = dwg_get_first_object (dwg, DWG_TYPE_VIEW_CONTROL);
+    if (ctrl && ctrl->tio.object && ctrl->tio.object->tio.VIEW_CONTROL)
       {
+        Dwg_Object_VIEW_CONTROL *_ctrl = ctrl->tio.object->tio.VIEW_CONTROL;
         Dwg_Object *obj = ctrl;
         TABLE (VIEW);
         COMMON_TABLE_CONTROL_FLAGS;
         error |= dwg_dxf_VIEW_CONTROL (dat, ctrl);
-        for (i = 0; i < dwg->view_control.num_entries; i++)
+        for (i = 0; i < _ctrl->num_entries; i++)
           {
+            if (!_ctrl->entries)
+              break;
+            if (!_ctrl->entries[i])
+              continue;
             obj = dwg_ref_object (dwg, _ctrl->entries[i]);
             if (obj && obj->type == DWG_TYPE_VIEW)
               error |= dwg_dxf_VIEW (dat, obj);
@@ -2905,16 +3205,20 @@ dxf_tables_write (Bit_Chain *restrict dat, Dwg_Data *restrict dwg)
   }
   SINCE (R_9c1)
   {
-    Dwg_Object_UCS_CONTROL *_ctrl = &dwg->ucs_control;
-    Dwg_Object *ctrl = &dwg->object[_ctrl->objid];
-    if (ctrl && ctrl->fixedtype == DWG_TYPE_UCS_CONTROL)
+    Dwg_Object *ctrl = dwg_get_first_object (dwg, DWG_TYPE_UCS_CONTROL);
+    if (ctrl && ctrl->tio.object && ctrl->tio.object->tio.UCS_CONTROL)
       {
+        Dwg_Object_UCS_CONTROL *_ctrl = ctrl->tio.object->tio.UCS_CONTROL;
         Dwg_Object *obj = ctrl;
         TABLE (UCS);
         COMMON_TABLE_CONTROL_FLAGS;
         error |= dwg_dxf_UCS_CONTROL (dat, ctrl);
-        for (i = 0; i < dwg->ucs_control.num_entries; i++)
+        for (i = 0; i < _ctrl->num_entries; i++)
           {
+            if (!_ctrl->entries)
+              break;
+            if (!_ctrl->entries[i])
+              continue;
             obj = dwg_ref_object (dwg, _ctrl->entries[i]);
             if (obj && obj->type == DWG_TYPE_UCS)
               {
@@ -2926,16 +3230,20 @@ dxf_tables_write (Bit_Chain *restrict dat, Dwg_Data *restrict dwg)
   }
   SINCE (R_10c1)
   {
-    Dwg_Object_APPID_CONTROL *_ctrl = &dwg->appid_control;
-    Dwg_Object *ctrl = &dwg->object[_ctrl->objid];
-    if (ctrl && ctrl->fixedtype == DWG_TYPE_APPID_CONTROL)
+    Dwg_Object *ctrl = dwg_get_first_object (dwg, DWG_TYPE_APPID_CONTROL);
+    if (ctrl && ctrl->tio.object && ctrl->tio.object->tio.APPID_CONTROL)
       {
+        Dwg_Object_APPID_CONTROL *_ctrl = ctrl->tio.object->tio.APPID_CONTROL;
         Dwg_Object *obj = ctrl;
         TABLE (APPID);
         COMMON_TABLE_CONTROL_FLAGS;
         error |= dwg_dxf_APPID_CONTROL (dat, ctrl);
-        for (i = 0; i < dwg->appid_control.num_entries; i++)
+        for (i = 0; i < _ctrl->num_entries; i++)
           {
+            if (!_ctrl->entries)
+              break;
+            if (!_ctrl->entries[i])
+              continue;
             obj = dwg_ref_object (dwg, _ctrl->entries[i]);
             if (obj && obj->type == DWG_TYPE_APPID)
               {
@@ -2947,17 +3255,21 @@ dxf_tables_write (Bit_Chain *restrict dat, Dwg_Data *restrict dwg)
   }
   SINCE (R_10c1)
   {
-    Dwg_Object_DIMSTYLE_CONTROL *_ctrl = &dwg->dimstyle_control;
-    Dwg_Object *ctrl = &dwg->object[_ctrl->objid];
-    if (ctrl && ctrl->fixedtype == DWG_TYPE_DIMSTYLE_CONTROL)
+    Dwg_Object *ctrl = dwg_get_first_object (dwg, DWG_TYPE_DIMSTYLE_CONTROL);
+    if (ctrl && ctrl->tio.object && ctrl->tio.object->tio.DIMSTYLE_CONTROL)
       {
+        Dwg_Object_DIMSTYLE_CONTROL *_ctrl = ctrl->tio.object->tio.DIMSTYLE_CONTROL;
         Dwg_Object *obj = ctrl;
         TABLE (DIMSTYLE);
         COMMON_TABLE_CONTROL_FLAGS;
         error |= dwg_dxf_DIMSTYLE_CONTROL (dat, ctrl);
         // ignoring morehandles
-        for (i = 0; i < dwg->dimstyle_control.num_entries; i++)
+        for (i = 0; i < _ctrl->num_entries; i++)
           {
+            if (!_ctrl->entries)
+              break;
+            if (!_ctrl->entries[i])
+              continue;
             obj = dwg_ref_object (dwg, _ctrl->entries[i]);
             if (obj && obj->type == DWG_TYPE_DIMSTYLE)
               {
@@ -2968,18 +3280,22 @@ dxf_tables_write (Bit_Chain *restrict dat, Dwg_Data *restrict dwg)
       }
   }
   // fool the warnings. this table is nowhere to be found in the wild. maybe pre-R_11
-  if (0 && dwg->vx_control.num_entries)
+  if (0)
     {
-      Dwg_Object_VX_CONTROL *_ctrl = &dwg->vx_control;
-      Dwg_Object *ctrl = &dwg->object[_ctrl->objid];
-      if (ctrl && ctrl->fixedtype == DWG_TYPE_VX_CONTROL)
+      Dwg_Object *ctrl = dwg_get_first_object (dwg, DWG_TYPE_VX_CONTROL);
+      if (ctrl)
         {
+          Dwg_Object_VX_CONTROL *_ctrl = ctrl->tio.object->tio.VX_CONTROL;
           Dwg_Object *obj = ctrl;
           TABLE (VX);
           COMMON_TABLE_CONTROL_FLAGS;
           error |= dwg_dxf_VX_CONTROL (dat, ctrl);
-          for (i = 0; i < dwg->vx_control.num_entries; i++)
+          for (i = 0; i < _ctrl->num_entries; i++)
             {
+              if (!_ctrl->entries)
+                break;
+              if (!_ctrl->entries[i])
+                continue;
               obj = dwg_ref_object (dwg, _ctrl->entries[i]);
               if (obj && obj->type == DWG_TYPE_VX_TABLE_RECORD)
                 {
@@ -3001,7 +3317,7 @@ dxf_tables_write (Bit_Chain *restrict dat, Dwg_Data *restrict dwg)
         LOG_ERROR ("BLOCK_CONTROL missing");
         return DWG_ERR_INVALIDDWG;
       }
-    ctrl = &dwg->object[_ctrl->objid];
+    ctrl = dwg_obj_generic_to_object (_ctrl, &error);
     if (!ctrl || ctrl->fixedtype != DWG_TYPE_BLOCK_CONTROL)
       return DWG_ERR_INVALIDDWG;
 
@@ -3039,6 +3355,10 @@ dxf_tables_write (Bit_Chain *restrict dat, Dwg_Data *restrict dwg)
 
     for (i = 0; i < dwg->block_control.num_entries; i++)
       {
+        if (!dwg->block_control.entries)
+          break;
+        if (!dwg->block_control.entries[i])
+          continue;
         obj = dwg_ref_object (dwg, dwg->block_control.entries[i]);
         if (obj && obj->type == DWG_TYPE_BLOCK_HEADER
             && obj != mspace
@@ -3125,6 +3445,7 @@ dxf_block_write (Bit_Chain *restrict dat, const Dwg_Object *restrict hdr,
     {
       if (obj->supertype == DWG_SUPERTYPE_ENTITY
           && obj->fixedtype != DWG_TYPE_ENDBLK
+          && obj->tio.entity != NULL
           && (obj->tio.entity->entmode != 2 ||
               (obj->tio.entity->ownerhandle != NULL
                && obj->tio.entity->ownerhandle->absolute_ref != mspace_ref

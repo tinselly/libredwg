@@ -20,7 +20,7 @@
 use strict;
 use warnings;
 use vars qw(@entity_names @object_names @subclasses
-            $max_entity_names $max_object_names);
+            $max_entity_names $max_object_names $max_subclasses);
 use Convert::Binary::C;
 #use Data::Dumper; # if DEBUG
 #BEGIN { chdir 'src' if $0 =~ /src/; }
@@ -85,21 +85,25 @@ $c->parse_file($hdr);
 #print Data::Dumper->Dump([$c->struct('_dwg_entity_TEXT')], ['_dwg_entity_TEXT']);
 #print Data::Dumper->Dump([$c->struct('struct _dwg_header_variables')], ['Dwg_Header_Variables']);
 
-my (%h, $n, %structs, %unions, %ENT, %DXF, %SIZE, %SUBCLASS, %DWG_TYPE, @unhandled_names);
-local (@entity_names, @object_names, @subclasses, $max_entity_names, $max_object_names);
-# todo: harmonize more subclasses
+my (%h, $n, %structs, %unions, %ENT, %DXF, %SIZE, %SUBCLASS, %SUBCLASSES, %DWG_TYPE,
+    @unhandled_names);
+local (@entity_names, @object_names, @subclasses, $max_entity_names, $max_object_names,
+       $max_subclasses);
+# todo: harmonize more subclasses, detect abstract classes with concrete typedefs
 for (sort $c->struct_names) {
-  if (/_dwg_entity_([A-Z0-9_]+)/) {
+  if (/^_dwg_entity_([A-Z0-9_]+)$/) {
     my $n = $1;
     $structs{$n}++;
     push @entity_names, $n;
-  } elsif (/_dwg_object_([A-Z0-9_]+)/) {
-    $structs{$1}++;
-    push @object_names, $1;
+  } elsif (/^_dwg_object_([A-Z0-9_]+)$/) {
+    my $n = $1;
+    $structs{$n}++;
+    push @object_names, $n;
   } elsif (/^_dwg_header_variables/) {
     ;
   } elsif (/^Dwg_([A-Z0-9]+)/) { # AuxHeader, Header, R2004_Header, SummaryInfo
     my $n = $1;
+    next if length $n <= 1;
     $structs{$n}++;
   } elsif (/_dwg_([A-Z0-9_]+)/ && !/_dwg_ODA/) {
     $structs{$_}++;
@@ -121,6 +125,16 @@ for (sort $c->union_names) {
 push @entity_names, qw(XLINE);                    # RAY
 push @entity_names, qw(VERTEX_MESH VERTEX_PFACE); # VERTEX_3D
 push @entity_names, qw(REGION BODY);              # 3DSOLID
+$structs{abstractobject_UNDERLAYDEFINITION}++;
+$structs{abstractentity_UNDERLAY}++;
+push @entity_names, qw(PDFUNDERLAY DGNUNDERLAY DWFUNDERLAY);
+push @object_names, qw(PDFDEFINITION DGNDEFINITION DWFDEFINITION);
+push @object_names, qw(ASSOCARRAYMODIFYPARAMETERS
+                       ASSOCARRAYPATHPARAMETERS
+                       ASSOCARRAYPOLARPARAMETERS
+                       ASSOCARRAYRECTANGULARPARAMETERS);
+$structs{abstractobject_ASSOCARRAYPARAMETERS}++;
+
 @entity_names = sort @entity_names;
 # get BITCODE_ macro types for each struct field
 open my $in, "<", $hdr or die "hdr: $!";
@@ -165,9 +179,47 @@ while (<$in>) {
 $ENT{LAYER}->{flag} = 'BS';
 $ENT{LAYER}->{name} = 'T';
 $ENT{DIMSTYLE}->{name} = 'T';
+$SUBCLASSES{DIMENSION_common} = [ qw(AcDbDimension) ];
+$SUBCLASSES{ACTION_3DSOLID} = [ qw(AcDbModelerGeometry AcDb3dSolid) ];
+$SUBCLASSES{TABLECONTENTs} = [ qw( AcDbLinkedTableData AcDbFormattedTableData AcDbTableContent) ];
 #$ENT{LTYPE}->{strings_area} = 'TF';
 close $in;
 my @old;
+
+sub expand_define {
+  my ($def, $n, $defined, $param) = @_;
+  if (exists $defined->{$def}) {
+    warn "expand defined $def fields";
+    if (!$param) { # replace the macro arg with $param? no. for now ignore
+      for (keys %{$DXF{$def}}) {
+        $DXF{$n}->{$_} = $DXF{$def}->{$_};
+      }
+      for (keys %{$ENT{$def}}) {
+        $ENT{$n}->{$_} = $ENT{$def}->{$_};
+      }
+    }
+    my $aref = $SUBCLASSES{$n};
+    for my $k (@{$SUBCLASSES{$def}}) {
+      # if defined subclass is not in the main subclass yet
+      if (!grep $_ eq $k, @$aref) {
+        if (@$aref) {
+          push @$aref, $k;
+        } else {
+          $aref = [ $k ];
+        }
+        $SUBCLASSES{$n} = $aref;
+      }
+    }
+  } else {
+    unless (/(DXF|DECODE|ENCODE|JSON|FREE)_3DSOLID/) {
+      warn "TODO $def fields not defined";
+    } else {
+      $n = 'ACTION_3DSOLID';
+      $defined->{$n}++;
+      @old = (); # TODO pop 3DSOLID_material
+    }
+  }
+}
 
 sub embedded_struct {
   my ($pre, $subclass) = @_;
@@ -205,9 +257,13 @@ sub dxf_in {
       } elsif (/^int DWG_FUNC_N\s?\(ACTION,_HATCH(\w+)\)/) {
         $n = 'HATCH';
         warn $n;
-      } elsif (/^\#define (COMMON_ENTITY_(?:POLYLINE|DIMENSION|))/) {
+      } elsif (/^\#define (COMMON_ENTITY_POLYLINE)/) {
         $n = $1;
-        warn $n;
+        warn "define $n";
+      } elsif (/^\#define (COMMON_3DSOLID|ACTION_3DSOLID|COMMON_ENTITY_DIMENSION)/) {
+        $n = $1;
+        $defined{$n}++;
+        warn "define $n";
       } elsif (/^\#define (\w+)_fields/) {
         $n = $1;
         $defined{$n}++;
@@ -359,7 +415,7 @@ sub dxf_in {
     } elsif (/^\s+HANDLE_VECTOR(?:_N)?\s*\((\w+),.*?,\s*(\d+)\)/) {
       $f = $1;
       $DXF{$n}->{$f} = $2 if $2;
-    } elsif (/^\s+SUB_HANDLE_VECTOR\s*\([^,]+?, (\w+), .+?, (\d+)\)/) {
+    } elsif (/^\s+SUB_HANDLE_VECTOR\s*\([^,]+?, (\w+), .+, (\d+)\)/) {
       $f = $1;
       $DXF{$n}->{$f} = $2 if $2;
     } elsif (/^\s+HEADER_.+\s*\((\w+),\s*(\d+)\)/) { # HEADER_RC
@@ -380,19 +436,33 @@ sub dxf_in {
       $f = $2;
       $DXF{$n}->{$f} = $3 if $3;
       $ENT{$n}->{$f} = $type if $type =~ /^T/;
-    } elsif (/^\s+(\w+)_fields;/) {
-      my $def = $1;
-      if (exists $defined{$def}) {
-        warn "expand defined $def fields";
-        for (keys %{$DXF{$def}}) {
-          $DXF{$n}->{$_} = $DXF{$def}->{$_};
+    } elsif (/^\s+SUBCLASS\s*\((\w.+)\)/) {
+      my $sc = $1;
+      if ($sc eq 'AcDbLayout') { # FIXME: pop PLOTSETTINGS earlier in LAYOUT
+        if (@old && $old[0] eq 'LAYOUT') {
+          $n = pop @old;
+          warn "$n popped";
         }
-        for (keys %{$ENT{$def}}) {
-          $ENT{$n}->{$_} = $ENT{$def}->{$_};
-        }
-      } else {
-        warn "TODO $def fields not defined";
       }
+      if (exists $SUBCLASSES{$n}) {
+        my $aref = $SUBCLASSES{$n};
+        push @$aref, $sc;
+        $SUBCLASSES{$n} = $aref;
+      } else {
+        $SUBCLASSES{$n} = [ $sc ];
+      }
+    } elsif (/^\s+(\w+)_fields;/) {
+      expand_define ($1, $n, \%defined);
+    } elsif (/^\s+(\w+_3DSOLID)/) { # special defines
+      expand_define ($1, $n, \%defined);
+    } elsif (/^\s+(\w+)_fields \((\w+)\)/) { # parametric macro
+      expand_define ($1, $n, \%defined, $2);
+    } elsif (/^\s+(COMMON_ENTITY_DIMENSION)/) {
+      expand_define ($1, $n, \%defined);
+    } elsif (/^$/ && $defined{$n}) {
+      warn "undef $n\n";
+      @old = ();
+      undef $n;
     }
     if ($f and $n and exists $DXF{$n}->{$f}) {
       warn "  $f $DXF{$n}->{$f}\n";
@@ -414,7 +484,6 @@ $DXF{'INSERT'}->{'block_header'} = 2;
 $DXF{'MINSERT'}->{'block_header'} = 2;
 $DXF{'POLYLINE_3D'}->{'flag'} = 70;
 $DXF{'POLYLINE_MESH'}->{'flag'} = 70;
-$DXF{'HATCH'}->{'boundary_handles'} = 330; # special DXF logic
 $DXF{'VISUALSTYLE'}->{'edge_hide_precision_flag'} = 290;
 $DXF{'VISUALSTYLE'}->{'is_internal_use_only'} = 291;
 # $DXF{'VISUALSTYLE'}->{'face_lighting_model'} = 71;
@@ -429,6 +498,7 @@ $DXF{'SORTENTSTABLE'}->{'ents'} = 331;
 $DXF{'SORTENTSTABLE'}->{'sort_ents'} = 5;
 $DXF{'PLOTSETTINGS'}->{'shadeplot'} = 333;
 $DXF{'OCD_Dimension'}->{'block'} = 2;
+$DXF{'TABLECONTENT'}->{'tablestyle'} = 340;
 $DXF{'TABLESTYLE'}->{'name'} = 3; # not 300
 $DXF{'TABLE_Cell'}->{'cell_flag_override'} = 177;
 $DXF{'ACSH_HistoryNode'}->{'trans'} = 40; # but inc by 1 for 16
@@ -442,6 +512,8 @@ $DXF{$_}->{'class_version'} = 280 for qw(ATTRIB ATTDEF); #r2010 only
 $DXF{$_}->{'elevation'} = 30 for qw(TEXT ATTRIB ATTDEF); # not 31
 $DXF{$_}->{'has_attribs'} = 66 for qw(INSERT MINSERT);
 #$DXF{$_}->{'has_vertex'} = 66 for qw(POLYLINE_2D POLYLINE_3D POLYLINE_PFACE);
+$DXF{UNDERLAYDEFINITION}->{'filename'} = 1;
+$DXF{UNDERLAYDEFINITION}->{'name'} = 2;
 $DXF{$_}->{'flag'} = 70 for qw(VERTEX_3D VERTEX_MESH VERTEX_PFACE_FACE POLYLINE_PFACE);
 my @solids = qw(3DSOLID REGION BODY
                 EXTRUDEDSURFACE LOFTEDSURFACE NURBSURFACE PLANESURFACE REVOLVEDSURFACE SWEPTSURFACE
@@ -589,6 +661,60 @@ my %DXFALIAS = # see also CLASS.dxfname
   ACDBASSOCALIGNEDDIMACTIONBODY => "ASSOCALIGNEDDIMACTIONBODY",
   ACDBDATATABLE => "DATATABLE",
   );
+my %DXFNAME =
+  (
+    POLYLINE_2D    => "POLYLINE",
+    POLYLINE_3D    => "POLYLINE",
+    POLYLINE_MESH  => "POLYLINE",
+    POLYLINE_PFACE => "POLYLINE",
+    VERTEX_2D         => "VERTEX",
+    VERTEX_3D         => "VERTEX",
+    VERTEX_MESH       => "VERTEX",
+    VERTEX_PFACE      => "VERTEX",
+    VERTEX_PFACE_FACE => "VERTEX",
+    DIMENSION_ALIGNED  => "DIMENSION",
+    DIMENSION_ANG2LN   => "DIMENSION",
+    DIMENSION_ANG3PT   => "DIMENSION",
+    DIMENSION_DIAMETER => "DIMENSION",
+    DIMENSION_LINEAR   => "DIMENSION",
+    DIMENSION_ORDINATE => "DIMENSION",
+    DIMENSION_RADIUS   => "DIMENSION",
+    TABLE => "ACAD_TABLE",
+    TABLECONTENT => "TABLE",
+    DETAILVIEWSTYLE => "ACDBDETAILVIEWSTYLE",
+    SECTIONVIEWSTYLE => "ACDBSECTIONVIEWSTYLE",
+    EVALUATION_GRAPH => "ACAD_EVALUATION_GRAPH",
+    DICTIONARYWDFLT => "ACDBDICTIONARYWDFLT",
+    PLACEHOLDER => "ACDBPLACEHOLDER",
+    CURVEPATH => "ACDBCURVEPATH",
+    MOTIONPATH => "ACDBMOTIONPATH",
+    POINTPATH => "ACDBPOINTPATH",
+    IBL_BACKGROUND => "RAPIDRTRENDERENVIRONMENT",
+    NAVISWORKSMODEL => "COORDINATION_MODEL", #?
+    PERSUBENTMGR => "ACDBPERSSUBENTMANAGER",
+    DYNAMICBLOCKPURGEPREVENTER => "ACDB_DYNAMICBLOCKPURGEPREVENTER_VERSION",
+    BLOCKREPRESENTATION => "ACDB_BLOCKREPRESENTATION_DATA",
+    DYNAMICBLOCKPROXYNODE => "ACAD_DYNAMICBLOCKPROXYNODE",
+    XREFPANELOBJECT => "EXACXREFPANELOBJECT",
+    GEOPOSITIONMARKER => "POSITIONMARKER",
+    PROXY_ENTITY => "ACAD_ENTITY_OBJECT",
+    PROXY_OBJECT => "ACAD_PROXY_OBJECT",
+    #PROXY_ENTITY => "ACAD_PROXY_ENTITY_WRAPPER",
+    #PROXY_OBJECT => "ACAD_PROXY_OBJECT_WRAPPER",
+   );
+
+sub dxfname {
+  $_ = shift;
+  return $DXFNAME{$_} if exists $DXFNAME{$_};
+  my $dxfname = $_;
+  if (/^(ASSOC|NAVISWORKS|POINTCLOUD)/) {
+    return "ACDB$dxfname";
+  }
+  if (/OBJECTCONTEXTDATA$/) {
+    return "ACDB_${_}_CLASS";
+  }
+  return $dxfname;
+}
 
 my $cfile = "$srcdir/dynapi.c";
 chmod 0644, $cfile if -e $cfile;
@@ -740,22 +866,52 @@ sub out_declarator {
   print $doc "\@item $name\n$type", $dxf ? ",\tDXF $dxf" : "", "\n";
 }
 
+# until the type is a struct or union
+sub expand_typedef {
+  my $s = shift;
+  if ($s =~ /^(struct|union)/) {
+    return $s;
+  }
+  my $typedef = $c->typedef($s);
+  return undef unless $typedef;
+  my $type;
+  $s = $typedef->{type};
+  while ($s and $s !~ /^(struct|union)/) {
+    $s = expand_typedef ($s);
+  }
+  return $s;
+}
+
+my %out_struct;
 sub out_struct {
   my ($tmpl, $n) = @_;
   #print $fh " /* ", Data::Dumper->Dump([$s], [$n]), "*/\n";
   my $key = $n;
-  $n = "_dwg_$n" unless $n =~ /^_dwg_/;
   my $sortedby = 'offset';
   my $s = $c->struct($tmpl);
   unless ($s) {
     $s = $c->union($tmpl);
   }
+  unless ($s) { # resolve abstract typedef to struct|union
+    $s = expand_typedef ($tmpl);
+    $s = $c->struct($s) if $s;
+  }
   unless ($s->{declarations}) {
     delete $ENT{$n};   # don't show up in dynapi_test.c
     return;
   }
+  if (exists $out_struct{$tmpl}) {
+    warn "skip duplicate $tmpl\n";
+    my $see = $out_struct{$tmpl};
+    print $doc "\@indentedblock\n";
+    print $doc "\@xref{$see}\n";
+    print $doc "\@end indentedblock\n\n";
+    return;
+  }
+  $out_struct{$tmpl} = $key;
+  $n = "_dwg_$n" unless $n =~ /^_dwg_/;
   my @declarations = @{$s->{declarations}};
-  if ($n =~ /^_dwg_(header_variables|object_object|object_entity|summaryinfo)$/) {
+  if ($n =~ /^_dwg_(header_variables|object_object|object_entity)$/) {
     @declarations = sort {
       my $aname = $a->{declarators}->[0]->{declarator};
       my $bname = $b->{declarators}->[0]->{declarator};
@@ -797,7 +953,56 @@ sub maxlen {
 }
 $max_entity_names = 1+maxlen(@entity_names);
 $max_object_names = 1+maxlen(@object_names);
+my %entity_names = map {$_ => 1} @entity_names;
+my %object_names = map {$_ => 1} @object_names;
+$max_subclasses = 0;
+for (keys %SUBCLASSES) {
+  if (!exists $entity_names{$_} and !exists $object_names{$_}) {
+    # FIXME: find parent class and add array to it.
+    # delete $SUBCLASSES{$_};
+  }
+}
+for (sort @entity_names) {
+# FIXME: fixup duplicates in TEXT
+  if ($_ eq 'TEXT') {
+    $SUBCLASSES{$_} = [ 'AcDbText' ];
+  } elsif (/^...UNDERLAY$/) {
+    $SUBCLASSES{$_} = [ 'AcDbUnderlayReference' ];
+  }
+  my $aref = $SUBCLASSES{$_};
+  unshift @$aref, 'AcDbEntity';
+  $SUBCLASSES{$_} = $aref; # if it didnt exist
+  my $len = @$aref;
+  $max_subclasses = $len if $len > $max_subclasses;
+}
+# /^(BLOCK_HEADER|LAYER|STYLE|LTYPE|VIEW|UCS|VPORT|APPID|DIMSTYLE|VX_TABLE_RECORD)$/
+my %table_dxfname = ( # See COMMON_TABLE_FLAGS
+  BLOCK_HEADER => 'Block',
+  LAYER => 'Layer',
+  STYLE => 'TextStyle',
+  LTYPE => 'Linetype',
+  VIEW => 'View',
+  UCS => 'UCS',
+  VPORT => 'Viewport',
+  APPID => 'RegApp',
+  DIMSTYLE => 'DimStyle',
+  VX_TABLE_RECORD => 'VX',
+);
+for (sort @object_names) {
+  my $aref = $SUBCLASSES{$_};
+  if (is_table ($_)) {
+    unshift @$aref, ('AcDbSymbolTableRecord', 'AcDb' . $table_dxfname{$_} . 'TableRecord');
+  } elsif (is_table_control ($_)) {
+    unshift @$aref, 'AcDbSymbolTable';
+  } else {
+    unshift @$aref, 'AcDbObject';
+  }
+  $SUBCLASSES{$_} = $aref; # if it didnt exist
+  my $len = @$aref;
+  $max_subclasses = $len if $len > $max_subclasses;
+}
 
+# ---------------------------------------------------------------
 for (<DATA>) {
   # expand enum or struct
   if (/^(.*)\@\@(\w+ \w+)\@\@(.*)/) {
@@ -821,13 +1026,29 @@ for (<DATA>) {
             $v = $s->{enumerators}->{'DWG_TYPE__'.$k};
             $vs = 'DWG_TYPE__'.$k;
           }
-          my $size = "sizeof (Dwg_$k)";
+          my $size = "0";
           if ($c->struct("_dwg_entity_$k")) {
             $size = "sizeof (struct _dwg_entity_$k)";
           } elsif ($c->struct("_dwg_object_$k")) {
             $size = "sizeof (struct _dwg_object_$k)";
-          } else {
-            $size = "0";
+          #} elsif ($c->typedef("Dwg_Object_$k")) {
+          #  my $type = expand_typedef ("Dwg_Object_$k");
+          #  if ($type) {
+          #    $size = "sizeof (Dwg_Object_$k)";
+          #    $k = $type;
+          #    $k =~ s/struct //;
+          #    $k =~ s/_dwg_(?:abstract)?object_//;
+          #    $k =~ s/ //g;
+          #  }
+          #} elsif ($c->typedef("Dwg_Entity_$k")) {
+          #  my $type = expand_typedef ("Dwg_Entity_$k");
+          #  if ($type) {
+          #    $size = "sizeof (Dwg_Entity_$k)";
+          #    $k = $type;
+          #    $k =~ s/struct //;
+          #    $k =~ s/_dwg_(?:abstract)?entity_//;
+          #    $k =~ s/ //g;
+          #  }
           }
           # see if the fields do exist:
           my $fields = exists $structs{$k} ? "_dwg_".$k."_fields" : "NULL";
@@ -837,10 +1058,19 @@ for (<DATA>) {
           } elsif ($k eq 'XLINE') {
             $fields = "_dwg_RAY_fields";
             $size = "sizeof (struct _dwg_entity_RAY)";
+          } elsif ($k =~ /^(PDF|DWF|DGN)DEFINITION$/) {
+            $fields = "_dwg_UNDERLAYDEFINITION_fields";
+            $size = "sizeof (Dwg_Object_$k)";
+          } elsif ($k =~ /^(PDF|DWF|DGN)UNDERLAY$/) {
+            $fields = "_dwg_UNDERLAY_fields";
+            $size = "sizeof (Dwg_Entity_$k)";
+          } elsif ($k =~ /^ASSOCARRAY(?:MODIFY|PATH|POLAR|RECTANGULAR)PARAMETERS$/) {
+            $fields = "_dwg_ASSOCARRAYPARAMETERS_fields";
+            $size = "sizeof (Dwg_Object_ASSOCARRAYPARAMETERS)";
           } elsif ($k =~ /^VERTEX_(MESH|PFACE)$/) {
             $fields = "_dwg_VERTEX_3D_fields";
             $size = "sizeof (struct _dwg_entity_VERTEX_3D)";
-          } elsif ($k =~ /^PROXY_LWPOLYLINE$/) {
+          } elsif ($k =~ /^PROXY_LWPOLYLINE$/) { # TODO subent, not entity
             $size = "sizeof (struct _dwg_entity_PROXY_LWPOLYLINE)";
           }
           $DWG_TYPE{$k} = $vs;
@@ -889,6 +1119,27 @@ for (<DATA>) {
               $n, $type, $subclass, $_ . "_fields", $size, $i++;
           }
         }
+      } elsif ($n eq 'name_subclasses') {
+        #print Dumper \%SUBCLASSES;
+        for (sort keys %SUBCLASSES) {
+          my $cl = $_;
+          if (exists $entity_names{$cl} or exists $object_names{$cl}) {
+            my $a = $SUBCLASSES{$cl};
+            # $cl =~ s/^3D/_3D/;
+            printf $fh "  { \"%s\", {", $cl;
+            for (0 .. $max_subclasses-1) {
+              if ($a->[$_]) {
+                printf $fh "\"%s\"", $a->[$_];
+              } else {
+                printf $fh "NULL";
+              }
+              if ($_ < $max_subclasses - 1) {
+                printf $fh ", ";
+              }
+            }
+            printf $fh "} },\n";
+          }
+        }
       } else {
         for (@{$n}) {
           my $len = length($_);
@@ -904,15 +1155,49 @@ for (<DATA>) {
       print $doc "All graphical objects with its fields. \@xref{Common Entity fields}\n\n";
       for (@entity_names) {
         print $doc "\@strong{$_} \@anchor{$_}\n\@cindex entity, $_\n",
-          "\@vindex $_\n\n" unless $_ eq 'DIMENSION_';
-        out_struct("struct _dwg_entity_$_", $_);
+          "\@vindex $_\n" unless $_ eq 'DIMENSION_';
+        print $doc "\@anchor{UNDERLAY}\n\@vindex UNDERLAY\n" if /^DGNUNDERLAY/;
+        print $doc "\n" unless $_ eq 'DIMENSION_';
+        my $typedef = $c->typedef("Dwg_Entity_$_");
+        # multiple type aliases, only emit one _field[]
+        if ($typedef and $typedef->{type} ne "struct _dwg_entity_$_") {
+          my $type = expand_typedef ($typedef->{type});
+          if ($type) {
+            my $n = $type;
+            $n =~ s/struct //;
+            $n =~ s/_dwg_(?:abstract)?entity_//;
+            $n =~ s/ //g;
+            out_struct($type, $n);
+          } else {
+            out_struct("struct _dwg_entity_$_", $_);
+          }
+        } else {
+          out_struct("struct _dwg_entity_$_", $_);
+        }
       }
     } elsif ($tmpl =~ /^for dwg_object_OBJECT/) {
       print $doc "\n\@node OBJECTS\n\@section OBJECTS\n\@cindex OBJECTS\n\n";
       print $doc "All non-graphical objects with its fields. \@xref{Common Object fields}\n\n";
       for (@object_names) {
-        print $doc "\@strong{$_} \@anchor{$_}\n\@cindex object, $_\n\@vindex $_\n\n";
-        out_struct("struct _dwg_object_$_", $_);
+        print $doc "\@strong{$_} \@anchor{$_}\n\@cindex object, $_\n\@vindex $_\n";
+        print $doc "\@anchor{UNDERLAYDEFINITION}\n\@vindex UNDERLAYDEFINITION\n" if /^PDFDEFINITION/;
+        print $doc "\@anchor{ASSOCARRAYPARAMETERS}\n\@vindex ASSOCARRAYPARAMETERS\n" if /^ASSOCARRAYMODIFYPARAMETERS/;
+        print $doc "\n";
+        my $typedef = $c->typedef("Dwg_Object_$_");
+        if ($typedef and $typedef->{type} ne "struct _dwg_object_$_") {
+          my $type = expand_typedef ($typedef->{type}); # unify to one struct
+          if ($type) {
+            my $n = $type;
+            $n =~ s/struct //;
+            $n =~ s/_dwg_(?:abstract)?object_//;
+            $n =~ s/ //g;
+            out_struct($type, $n);
+          } else {
+            out_struct("struct _dwg_object_$_", $_);
+          }
+        } else {
+          out_struct("struct _dwg_object_$_", $_);
+        }
       }
     } elsif ($tmpl =~ /^for dwg_subclasses/) {
       for (@subclasses) {
@@ -935,22 +1220,17 @@ for (<DATA>) {
         print $doc "\@strong{Common Entity fields} \@anchor{Common Entity fields}\n";
         print $doc "\@cindex Common Entity fields\n\n";
       } elsif ($1 eq 'summaryinfo') {
-        print $doc "\n\@node SummaryInfo\n\@section SummaryInfo\n\@cindex SummaryInfo\n\n";
-        print $doc "All Section SummaryInfo fields.\n\n";
+        print $doc "\@strong{SummaryInfo fields} \@anchor{SummaryInfo fields}\n";
+        print $doc "\@cindex SummaryInfo fields\n\n";
+        print $doc "\@pxref{SummaryInfo}\n\n";
       } else {
         print $doc "\@strong{$1}\n";
         print $doc "\@vindex $1\n\n";
       }
       out_struct($tmpl, $1);
     } elsif ($tmpl =~ /^struct Dwg_(\w+)/) {
-      warn $tmpl;
-      if ($1 eq 'summaryinfo') {
-        print $doc "\n\@node SummaryInfo\n\@section SummaryInfo\n\@cindex SummaryInfo\n\n";
-        print $doc "All Section SummaryInfo fields.\n\n";
-      } else {
-        print $doc "\@strong{$1}\n";
-        print $doc "\@vindex $1\n\n";
-      }
+      print $doc "\@strong{$1}\n";
+      print $doc "\@vindex $1\n\n";
       out_struct($tmpl, $1);
     }
     print $fh $post,"\n";
@@ -988,9 +1268,11 @@ my %FMT = (
     'RC*' => '%s',
     );
 
+# ---------------------------------------------------------------
+# The simple list of macro defs (linear search)
 my $objfile = "$srcdir/objects.inc";
 chmod 0644, $objfile if -e $objfile;
-open my $inc, ">", $objfile or die "$objfile: $!";
+open my $inc, ">", "$objfile.tmp" or die "$objfile: $!";
 print $inc <<"EOF";
 /* ex: set ro ft=c: -*- mode: c; buffer-read-only: t -*- */
 /*****************************************************************************/
@@ -1023,9 +1305,11 @@ print $inc "\n";
 for my $name (@object_names) {
   print $inc "DWG_OBJECT ($name)\n";
 }
-chmod 0444, $inc;
 close $inc;
+mv_if_not_same ("$objfile.tmp", $objfile);
+chmod 0444, $objfile;
 
+# ---------------------------------------------------------------
 my $infile = "$topdir/test/unit-testing/dynapi_test.c.in";
 open $in, $infile or die "$infile: $!";
 $cfile  = "$topdir/test/unit-testing/dynapi_test.c";
@@ -1151,6 +1435,11 @@ static int test_$xname (const Dwg_Object *obj)
   const Dwg_Object_$Entity *restrict obj_obj = obj->tio.$lentity;
   $struct *restrict $lname = obj->tio.$lentity->tio.$xname;
   failed = 0;
+  if (!obj_obj || !$lname)
+    {
+      fail ("NULL $xname");
+      return 1;
+    }
 EOF
 
   for my $var (sort keys %{$ENT{$name}}) {
@@ -1385,11 +1674,11 @@ EOF
     for my $name (@object_names) {
       my $xname = $name;
       print $fh <<"EOF";
-  size1 = sizeof (struct _dwg_object_$xname);
+  size1 = sizeof (Dwg_Object_$xname);
   size2 = dwg_dynapi_fields_size (\"$name\");
   if (size1 != size2)
     {
-      fprintf (stderr, "sizeof(struct _dwg_object_$xname): %d != "
+      fprintf (stderr, "sizeof(Dwg_Object_$xname): %d != "
                "dwg_dynapi_fields_size (\\\"$name\\\"): %d\\n", size1, size2);
       error++;
     }
@@ -1433,7 +1722,7 @@ sub mv_if_not_same {
 
 # find DEBUGGING classes
 my $classes_inc = "$srcdir/classes.inc";
- my (%STABLE, %UNSTABLE, %DEBUGGING, %UNHANDLED, %FIXED, %STABLEVAR);
+my (%STABLE, %UNSTABLE, %DEBUGGING, %UNHANDLED, %FIXED, %STABLEVAR);
 open $in, "<", $classes_inc or die "$classes_inc: $!";
 while (<$in>) {
   if (/^\s*STABLE_CLASS(?:_DXF|_CPP|)\s*\(ACTION,\s+(.+?)[,\)]/) {
@@ -1449,9 +1738,8 @@ while (<$in>) {
       $UNHANDLED{$1}++;
   }
 }
+delete $UNHANDLED{PROXY_LWPOLYLINE};
 close $in;
-my %entity_names = map {$_ => 1} @entity_names;
-my %object_names = map {$_ => 1} @object_names;
 for (sort keys %UNHANDLED) {
   push @unhandled_names, $_ if !exists $entity_names{$_} and !exists $object_names{$_};
 }
@@ -1471,11 +1759,141 @@ for (@object_names) {
 $STABLE{_3DSOLID}++;
 $STABLE{_3DFACE}++;
 $FIXED{_3DSOLID}++;
-$FIXED{_3DFACE}++;
+$FIXED{'_3DFACE'}++;
 for (keys %STABLE) {
   $STABLEVAR{$_}++ unless $FIXED{$_};
 }
 
+sub stability {
+  my $n = shift;
+  return 'STABLE' if $STABLE{$n};
+  return 'STABLE' if $FIXED{$n};
+  return 'UNSTABLE' if $UNSTABLE{$n};
+  return 'DEBUGGING' if $DEBUGGING{$n};
+  return 'UNHANDLED' if $UNHANDLED{$n};
+  die "no stability class for $n";
+}
+
+# ---------------------------------------------------------------
+# The gperf hash
+my $ofile = "$srcdir/objects.in";
+chmod 0644, $ofile if -e $ofile;
+open $inc, ">", "$ofile.tmp" or die "$ofile: $!";
+print $inc <<'EOF';
+%{ // -*- mode: c -*-
+/*****************************************************************************/
+/*  LibreDWG - free implementation of the DWG file format                    */
+/*                                                                           */
+/*  Copyright (C) 2020 Free Software Foundation, Inc.                        */
+/*                                                                           */
+/*  This library is free software, licensed under the terms of the GNU       */
+/*  General Public License as published by the Free Software Foundation,     */
+/*  either version 3 of the License, or (at your option) any later version.  */
+/*  You should have received a copy of the GNU General Public License        */
+/*  along with this program.  If not, see <http://www.gnu.org/licenses/>.    */
+/*****************************************************************************/
+
+/*
+ * objects.c: define all our entity and object names as hashmap,
+ *            generated via gperf from object.in,
+ *            which is generated by gen-dynapi.pl
+ *
+ * written Reini Urban
+ */
+
+#include <string.h>
+#include "config.h"
+#include "dwg.h"
+#include "common.h"
+#include "classes.h"
+
+// v3.1 changed len type from unsigned int to size_t (gperf d519d1a821511eaa22eae6d9019a548aea21e6)
+#ifdef GPERF_VERSION
+#  if GPERF_VERSION < 301
+#    define SIZE_TYPE unsigned int
+#  else
+#    define SIZE_TYPE size_t
+#  endif
+#else
+#  define SIZE_TYPE size_t
+#endif
+static const struct _dwg_dxfname * in_word_set (register const char *str, register SIZE_TYPE len);
+
+#define STABLE (unsigned)DWG_CLASS_STABLE
+#define UNSTABLE (unsigned)DWG_CLASS_UNSTABLE
+#define DEBUGGING (unsigned)DWG_CLASS_DEBUGGING
+#define UNHANDLED (unsigned)DWG_CLASS_UNHANDLED
+
+%}
+%7bit
+%language=ANSI-C
+%struct-type
+%readonly-tables
+%pic
+
+struct _dwg_dxfname {int name; const char *const dxfname; const Dwg_Object_Type type; const unsigned isent:1; const unsigned stability:4; };
+
+%%
+# Entities
+EOF
+$n = 28;
+for my $name (@entity_names) {
+  my $xname = $name =~ /^3/ ? "_$name" : $name; # 3DFACE, 3DSOLID
+  #next if $name eq 'DIMENSION_';
+  #next if $name eq 'PROXY_LWPOLYLINE';
+  my $dxfname = dxfname($name);
+  printf $inc "%-${n}s %-${n}s  DWG_TYPE_%s,\t1,\t%s\n", "\"$name\",", "\"$dxfname\",",
+    $xname, stability($xname);
+}
+print $inc "# Objects\n";
+$n = 35;
+for my $name (sort @object_names) {
+  my $dxfname = dxfname($name);
+  printf $inc "%-${n}s %-${n}s  DWG_TYPE_%s,\t0,\t%s\n", "\"$name\",", "\"$dxfname\",",
+    $name, stability($name);
+}
+print $inc <<'EOF';
+%%
+
+/* Find if an object name (our internal name, not anything used elsewhere)
+   is defined, and return our fixed type, the public dxfname and if it's an entity. */
+EXPORT int dwg_object_name (const char *const restrict name,
+                            const char **restrict dxfname,
+                            Dwg_Object_Type *restrict typep, int *restrict is_entp,
+                            Dwg_Class_Stability *restrict stabilityp)
+{
+  const struct _dwg_dxfname* result;
+  const size_t len = strlen (name);
+  // only allow UPPERCASE 7-bit names
+  if (strspn (name, "ABCDEFGHIJKLMNOPQRSTUVWXYZ_23") != len)
+    return 0;
+  result = in_word_set (name, len);
+  if (result)
+    {
+      if (dxfname)
+        *dxfname = result->dxfname;
+      if (typep)
+        *typep   = result->type;
+      if (is_entp)
+        *is_entp = result->isent;
+      if (stabilityp)
+        *stabilityp = result->stability;
+      return 1;
+    }
+  return 0;
+}
+
+/*
+ * Local variables:
+ *   c-file-style: "gnu"
+ * End:
+ * vim: expandtab shiftwidth=4 cinoptions='\:2=2' :
+ */
+EOF
+close $inc;
+mv_if_not_same ("$ofile.tmp", $ofile);
+chmod 0444, $ofile;
+ 
 sub out_classes {
   my ($fh, $names, $STABILITY, $tmpl) = @_;
   my $lname;
@@ -1671,10 +2089,28 @@ while (<$in>) {
     $tmpl = "typedef struct _dwg_object_\$name\t\tdwg_obj_\$lname;\n";
     out_classes ($out, \@object_names, \%FIXED, $tmpl);
     print $out "/* untyped > 500 */\n";
-    out_classes ($out, \@object_names, \%STABLEVAR, $tmpl);
+    # without UNDERLAYDEFINITION
+    my %STABLEVAR1 = %STABLEVAR;
+    delete %STABLEVAR1{qw(PDFDEFINITION DGNDEFINITION DWFDEFINITION)};
+    out_classes ($out, \@object_names, \%STABLEVAR1, $tmpl);
+    my %STABLEVAR2 = map {$_ => 1} qw(PDFDEFINITION DGNDEFINITION DWFDEFINITION);
+    $tmpl = "typedef struct _dwg_abstractobject_UNDERLAYDEFINITION\t\tdwg_obj_\$lname;\n";
+    out_classes ($out, \@object_names, \%STABLEVAR2, $tmpl);
+    $tmpl = "typedef struct _dwg_object_\$name\t\tdwg_obj_\$lname;\n";
+
     print $out "/* unstable */\n";
-    out_classes ($out, \@object_names, \%UNSTABLE, $tmpl);
+    # without ASSOCARRAYPARAMETERS
+    my %UNSTABLE1 = %UNSTABLE;
+    delete %UNSTABLE1{qw(ASSOCARRAYMODIFYPARAMETERS ASSOCARRAYPATHPARAMETERS
+                         ASSOCARRAYPOLARPARAMETERS ASSOCARRAYRECTANGULARPARAMETERS)};
+    out_classes ($out, \@object_names, \%UNSTABLE1, $tmpl);
+    my %UNSTABLE2 = map {$_ => 1} qw(ASSOCARRAYMODIFYPARAMETERS ASSOCARRAYPATHPARAMETERS
+                                       ASSOCARRAYPOLARPARAMETERS ASSOCARRAYRECTANGULARPARAMETERS);
+    $tmpl = "typedef struct _dwg_abstractobject_ASSOCARRAYPARAMETERS\t\tdwg_obj_\$lname;\n";
+    out_classes ($out, \@object_names, \%UNSTABLE2, $tmpl);
+    #out_classes ($out, \@object_names, \%UNSTABLE, $tmpl);
     print $out "/* debugging */\n";
+    $tmpl = "typedef struct _dwg_object_\$name\t\tdwg_obj_\$lname;\n";
     out_classes ($out, \@object_names, \%DEBUGGING, $tmpl);
     out_classes ($out, \@object_names, \%UNHANDLED, "//".$tmpl);
     out_classes ($out, \@unhandled_names, \%UNHANDLED, "//".$tmpl);
@@ -1818,7 +2254,27 @@ my $dwg_h = "$topdir/include/dwg.h";
 open $in, "<", $dwg_h or die "$dwg_h: $!";
 open $out, ">", "$dwg_h.tmp" or die "$dwg_h.tmp: $!";
 $gen = 0;
+my $enum = 0;
+my (@VARTYPES, %VARTYPES);
 while (<$in>) {
+  # generated sorted DWG_TYPE_ enum as array and hash.
+  # from PROXY_OBJECT to FREED
+  if ($enum and /^\s+DWG_TYPE_([^\t ,]+)/) {
+    my $n = $1;
+    if ($n =~ /^FREED\s?/) {
+      $enum = 0;
+      print $out $_; # because of the next shortcut
+      next;
+    }
+    push @VARTYPES, $n;
+    $VARTYPES{$n} = $enum++;
+  }
+  if (/^\s+DWG_TYPE_PROXY_OBJECT = 0x1f3/) {
+    $enum = 500;
+  }
+  if (/^} Dwg_Object_Type/) {
+    $enum = 0;
+  }
   if (m/    \/\* Start auto-generated entity-union/) {
     print $out $_;
     $tmpl = "    Dwg_Entity_\$name *\$name;\n";
@@ -1925,6 +2381,43 @@ close $out;
 mv_if_not_same ("$free_h.tmp", $free_h);
 }
 
+if (1) {
+  my $file = "$topdir/src/classes.c";
+  open $in, "<", $file or die "$file: $!";
+  open $out, ">", "$file.tmp" or die "$file.tmp: $!";
+  $gen = 0;
+  while (<$in>) {
+    if (m/^\s+\/\* Start auto-generated variable/) {
+      print $out $_;
+      my $e = 500;
+      for (@VARTYPES) {
+        printf $out "    %-40s	/* %d */\n", "\"$_\",", $e++;
+      }
+      print $out "  /* End auto-generated variable */\n";
+      $gen = 1;
+    }
+    if (m/^\s+\/\* Start auto-generated dxfnames/) {
+      print $out $_;
+      my $e = 500;
+      for (@VARTYPES) {
+        my $dxfname = dxfname $_;
+        printf $out "    %-40s	/* %d */\n", "\"$dxfname\",", $e++;
+      }
+      print $out "  /* End auto-generated dxfnames */\n";
+      $gen = 1;
+    }
+    if (!$gen) {
+      print $out $_;
+    }
+    if (m/^\s*\/\* End auto-generated/) {
+      $gen = 0;
+    }
+  }
+  close $in;
+  close $out;
+  mv_if_not_same ("$file.tmp", $file);
+}
+ 
 my $done = 0;
 my $ifile = "$topdir/bindings/dwg.i";
 open $in, "<", $ifile or die "$ifile: $!";
@@ -1988,7 +2481,7 @@ mv_if_not_same ("$ifile.tmp", $ifile);
 # NOTE: in the 2 #line's below use __LINE__ + 1
 __DATA__
 /* ex: set ro ft=c: -*- mode: c; buffer-read-only: t -*- */
-#line 1988 "gen-dynapi.pl"
+#line 2458 "gen-dynapi.pl"
 /*****************************************************************************/
 /*  LibreDWG - free implementation of the DWG file format                    */
 /*                                                                           */
@@ -2024,18 +2517,6 @@ Dwg_Object *dwg_obj_generic_to_object (const void *restrict obj,
                                        int *restrict error);
 #endif
 
-#define MAXLEN_ENTITIES @@scalar max_entity_names@@
-#define MAXLEN_OBJECTS @@scalar max_object_names@@
-
-/* sorted for bsearch. from typedef struct _dwg_entity_*: */
-static const char dwg_entity_names[][MAXLEN_ENTITIES] = {
-@@list entity_names@@
-};
-/* sorted for bsearch. from typedef struct _dwg_object_*: */
-static const char dwg_object_names[][MAXLEN_OBJECTS] = {
-@@list object_names@@
-};
-
 @@struct _dwg_header_variables@@
 @@for dwg_entity_ENTITY@@
 @@for dwg_object_OBJECT@@
@@ -2047,6 +2528,7 @@ static const char dwg_object_names[][MAXLEN_OBJECTS] = {
 
 @@struct _dwg_summaryinfo@@
 
+/* FIXME: Remove name. Get type via dwg_object_name() */
 struct _name_type_fields {
   const char *const name;
   const enum DWG_OBJECT_TYPE type;
@@ -2062,24 +2544,30 @@ struct _name_subclass_fields {
   const int size;
 };
 
-/* Fields for all the objects, sorted for bsearch. from enum DWG_OBJECT_TYPE: */
+/* Generated fields for all the objects, sorted for bsearch. from enum DWG_OBJECT_TYPE.
+   FIXME: Replace name by type. Get type via dwg_object_name().
+   Make it an array of type for O(1) lookup.
+ */
 static const struct _name_type_fields dwg_name_types[] = {
 @@enum DWG_OBJECT_TYPE@@
 };
 
-/* Fields for all the subclasses, sorted for bsearch */
+/* Generated fields for all the subclasses, sorted for bsearch */
 static const struct _name_subclass_fields dwg_list_subclasses[] = {
 @@list subclasses@@
 };
 
-#line 2072 "gen-dynapi.pl"
-static int
-_name_inl_cmp (const void *restrict key, const void *restrict elem)
-{
-  //https://en.cppreference.com/w/c/algorithm/bsearch
-  return strcmp ((const char *)key, (const char *)elem); //inlined
-}
+struct _name_subclasses {
+  const char *const name;
+  const char *const subclasses[@@scalar max_subclasses@@];
+};
 
+/* List of all allowed subclasses per class. sorted for bsearch. */
+static const struct _name_subclasses dwg_name_subclasses[] = {
+@@list name_subclasses@@
+};
+
+#line 2544 "gen-dynapi.pl"
 struct _name
 {
   const char *const name;
@@ -2093,14 +2581,13 @@ _name_struct_cmp (const void *restrict key, const void *restrict elem)
   return strcmp ((const char *)key, f->name); //deref
 }
 
-#define NUM_ENTITIES    ARRAY_SIZE(dwg_entity_names)
-#define NUM_OBJECTS     ARRAY_SIZE(dwg_object_names)
 #define NUM_NAME_TYPES  ARRAY_SIZE(dwg_name_types)
 #define NUM_SUBCLASSES  ARRAY_SIZE(dwg_list_subclasses)
 
 static
 const struct _name_type_fields*
  __nonnull ((1))
+// FIXME: use type arg only
 _find_entity (const char *name)
 {
   const char *p = (const char *)bsearch (name, dwg_name_types, NUM_NAME_TYPES,
@@ -2135,19 +2622,17 @@ _find_subclass (const char *name)
 EXPORT bool
 is_dwg_entity (const char *name)
 {
-  return bsearch (name, dwg_entity_names, NUM_ENTITIES, MAXLEN_ENTITIES,
-                  _name_inl_cmp)
-             ? true
-             : false;
+  int isent;
+  return dwg_object_name (name, NULL, NULL, &isent, NULL)
+         && isent;
 }
 
 EXPORT bool
 is_dwg_object (const char *name)
 {
-  return bsearch (name, dwg_object_names, NUM_OBJECTS, MAXLEN_OBJECTS,
-                  _name_inl_cmp)
-             ? true
-             : false;
+  int isent;
+  return dwg_object_name (name, NULL, NULL, &isent, NULL)
+         && !isent;
 }
 
 EXPORT const Dwg_DYNAPI_field *
@@ -2285,6 +2770,8 @@ dwg_dynapi_entity_value (void *restrict _obj, const char *restrict name,
   {
     int error;
     const Dwg_Object* obj = dwg_obj_generic_to_object (_obj, &error);
+    // Here we need to ignore errors, because we allow subentities via
+    // CHK_SUBCLASS_* e.g. layout->plotsetting via PLOTSETTING
     if (obj && strNE (obj->name, name)) // objid may be 0
       {
         const int loglevel = obj->parent->opts & DWG_OPTS_LOGLEVEL;
@@ -2296,11 +2783,8 @@ dwg_dynapi_entity_value (void *restrict _obj, const char *restrict name,
       const Dwg_DYNAPI_field *f = dwg_dynapi_entity_field (name, fieldname);
       if (!f)
         {
-          int loglevel;
-          if (obj)
-            loglevel = obj->parent->opts & DWG_OPTS_LOGLEVEL;
-          else
-            loglevel = DWG_LOGLEVEL_ERROR;
+          int loglevel = (obj && obj->parent) ? obj->parent->opts & DWG_OPTS_LOGLEVEL
+                                              : DWG_LOGLEVEL_ERROR;
           LOG_ERROR ("%s: Invalid %s field %s", __FUNCTION__, name, fieldname);
           return false;
         }
@@ -2327,6 +2811,8 @@ dwg_dynapi_entity_utf8text (void *restrict _obj, const char *restrict name,
   {
     int error;
     const Dwg_Object* obj = dwg_obj_generic_to_object (_obj, &error);
+    // Here we need to ignore errors, because we allow subentities via
+    // CHK_SUBCLASS_* e.g. layout->plotsetting via PLOTSETTING
     if (obj && strNE (obj->name, name)) // objid may be 0
       {
         const int loglevel = obj->parent->opts & DWG_OPTS_LOGLEVEL;
@@ -2336,22 +2822,19 @@ dwg_dynapi_entity_utf8text (void *restrict _obj, const char *restrict name,
       }
     {
       const Dwg_DYNAPI_field *f = dwg_dynapi_entity_field (name, fieldname);
-      const Dwg_Version_Type dwg_version
-          = obj ? obj->parent->header.version : R_INVALID;
+      const Dwg_Data *dwg = obj ? obj->parent : NULL;
+      const bool is_tu = dwg ? IS_FROM_TU_DWG (dwg) : false;
+
       if (!f || !f->is_string)
         {
-          int loglevel;
-          if (obj)
-            loglevel = obj->parent->opts & DWG_OPTS_LOGLEVEL;
-          else
-            loglevel = DWG_LOGLEVEL_ERROR;
+          int loglevel = dwg ? dwg->opts & DWG_OPTS_LOGLEVEL : DWG_LOGLEVEL_ERROR;
           LOG_ERROR ("%s: Invalid %s text field %s", __FUNCTION__, name, fieldname);
           return false;
         }
       if (fp)
         memcpy (fp, f, sizeof (Dwg_DYNAPI_field));
 
-      if (dwg_version >= R_2007 && strNE (f->type, "TF")) /* not TF */
+      if (is_tu && strNE (f->type, "TF")) /* not TF */
         {
           BITCODE_TU wstr = *(BITCODE_TU*)((char*)_obj + f->offset);
           char *utf8 = bit_convert_TU (wstr);
@@ -2417,12 +2900,12 @@ dwg_dynapi_header_utf8text (const Dwg_Data *restrict dwg,
     if (f && f->is_string)
       {
         const Dwg_Header_Variables *const _obj = &dwg->header_vars;
-        const Dwg_Version_Type dwg_version = dwg->header.version;
+        const bool is_tu = IS_FROM_TU_DWG (dwg);
 
         if (fp)
           memcpy (fp, f, sizeof (Dwg_DYNAPI_field));
 
-        if (dwg_version >= R_2007 && strNE (f->type, "TF")) /* not TF */
+        if (is_tu && strNE (f->type, "TF")) /* not TF */
           {
             BITCODE_TU wstr = *(BITCODE_TU*)((char*)_obj + f->offset);
             char *utf8 = bit_convert_TU (wstr);
@@ -2461,7 +2944,7 @@ dwg_dynapi_common_value(void *restrict _obj, const char *restrict fieldname,
     const Dwg_DYNAPI_field *f;
     int error;
     const Dwg_Object *obj = dwg_obj_generic_to_object (_obj, &error);
-    if (!obj)
+    if (!obj || error)
       {
         const int loglevel = DWG_LOGLEVEL_ERROR;
         LOG_ERROR ("%s: dwg_obj_generic_to_object failed", __FUNCTION__);
@@ -2519,9 +3002,9 @@ dwg_dynapi_common_utf8text(void *restrict _obj, const char *restrict fieldname,
     Dwg_DYNAPI_field *f;
     int error;
     const Dwg_Object *obj = dwg_obj_generic_to_object (_obj, &error);
-    Dwg_Data *dwg;
+    Dwg_Data *dwg = NULL;
 
-    if (!obj)
+    if (!obj || error)
       {
         const int loglevel = DWG_LOGLEVEL_ERROR;
         LOG_ERROR ("%s: dwg_obj_generic_to_object failed", __FUNCTION__);
@@ -2554,12 +3037,12 @@ dwg_dynapi_common_utf8text(void *restrict _obj, const char *restrict fieldname,
 
     if (f && f->is_string)
       {
-        const Dwg_Version_Type dwg_version = dwg->header.version;
+        const bool is_tu = IS_FROM_TU_DWG (dwg);
 
         if (fp)
           memcpy (fp, f, sizeof(Dwg_DYNAPI_field));
 
-        if (dwg_version >= R_2007 && strNE (f->type, "TF")) /* not TF */
+        if (is_tu && strNE (f->type, "TF")) /* not TF */
           {
             BITCODE_TU wstr = *(BITCODE_TU*)((char*)_obj + f->offset);
             char *utf8 = bit_convert_TU (wstr);
@@ -2579,7 +3062,7 @@ dwg_dynapi_common_utf8text(void *restrict _obj, const char *restrict fieldname,
       }
     else
       {
-        const int loglevel = dwg->opts & DWG_OPTS_LOGLEVEL;
+        const int loglevel = dwg ? dwg->opts & DWG_OPTS_LOGLEVEL : DWG_LOGLEVEL_ERROR;
         LOG_ERROR ("%s: Invalid common text field %s", __FUNCTION__, fieldname);
         return false;
       }
@@ -2613,7 +3096,7 @@ dynapi_set_helper (void *restrict old, const Dwg_DYNAPI_field *restrict f,
         {
           BITCODE_TU wstr;
           if (is_utf8)
-            wstr = bit_utf8_to_TU (*(char **)value);
+            wstr = bit_utf8_to_TU (*(char **)value, 0);
           else // source is already TU
             {
 #if defined(HAVE_WCHAR_H) && defined(SIZEOF_WCHAR_T) && SIZEOF_WCHAR_T == 2
@@ -2650,6 +3133,12 @@ dwg_dynapi_entity_set_value (void *restrict _obj, const char *restrict name,
   {
     int error;
     const Dwg_Object *obj = dwg_obj_generic_to_object (_obj, &error);
+    if (error)
+      {
+        const int loglevel = DWG_LOGLEVEL_ERROR;
+        LOG_ERROR ("%s: dwg_obj_generic_to_object failed", __FUNCTION__);
+        return false;
+      }
     if (obj && strNE (obj->name, name))
       {
         const int loglevel = obj->parent->opts & DWG_OPTS_LOGLEVEL;
@@ -2663,11 +3152,11 @@ dwg_dynapi_entity_set_value (void *restrict _obj, const char *restrict name,
       const Dwg_Data *dwg
         = obj ? obj->parent
               : ((Dwg_Object_UNKNOWN_OBJ *)_obj)->parent->dwg;
-      const Dwg_Version_Type dwg_version = dwg ? dwg->header.version : R_INVALID;
+      const Dwg_Version_Type dwg_version = dwg ? dwg->header.from_version : R_INVALID;
 
       if (!f)
         {
-          const int loglevel = dwg->opts & DWG_OPTS_LOGLEVEL;
+          const int loglevel = dwg ? dwg->opts & DWG_OPTS_LOGLEVEL : 0;
           LOG_ERROR ("%s: Invalid %s field %s", __FUNCTION__, name, fieldname);
           return false;
         }
@@ -2680,7 +3169,7 @@ dwg_dynapi_entity_set_value (void *restrict _obj, const char *restrict name,
 }
 
 EXPORT bool
-dwg_dynapi_header_set_value (const Dwg_Data *restrict dwg,
+dwg_dynapi_header_set_value (Dwg_Data *restrict dwg,
                              const char *restrict fieldname,
                              const void *restrict value, const bool is_utf8)
 {
@@ -2701,6 +3190,29 @@ dwg_dynapi_header_set_value (const Dwg_Data *restrict dwg,
 
         old = &((char*)_obj)[f->offset];
         dynapi_set_helper (old, f, dwg->header.version, value, is_utf8);
+
+        // Set also FLAGS
+        if (strEQc (fieldname, "CELWEIGHT"))
+          {
+            dwg->header_vars.FLAGS &= ~0x1f; // delete old, and set new
+            dwg->header_vars.FLAGS |= dxf_revcvt_lweight (dwg->header_vars.CELWEIGHT);
+          }
+#define SET_HDR_FLAGS(name, bit, inverse)          \
+        else if (strEQc (fieldname, #name))        \
+          {                                        \
+            if (dwg->header_vars.name && !inverse) \
+              dwg->header_vars.FLAGS |= bit;       \
+            else                                   \
+              dwg->header_vars.FLAGS &= ~bit;      \
+          }
+        SET_HDR_FLAGS (ENDCAPS, 0x60, 0)
+        SET_HDR_FLAGS (JOINSTYLE, 0x180, 0)
+        SET_HDR_FLAGS (LWDISPLAY, 0x200, 1)
+        SET_HDR_FLAGS (XEDIT, 0x400, 1)
+        SET_HDR_FLAGS (EXTNAMES, 0x800, 0)
+        SET_HDR_FLAGS (PSTYLEMODE, 0x2000, 0)
+        SET_HDR_FLAGS (OLESTARTUP, 0x4000, 0)
+
         return true;
       }
     else
@@ -2727,7 +3239,7 @@ dwg_dynapi_common_set_value (void *restrict _obj,
     void *old;
     const Dwg_Object *obj = dwg_obj_generic_to_object (_obj, &error);
     Dwg_Data *dwg;
-    if (!obj)
+    if (!obj || error)
       {
         const int loglevel = DWG_LOGLEVEL_ERROR;
         LOG_ERROR ("%s: dwg_obj_generic_to_object failed", __FUNCTION__);
@@ -2774,6 +3286,36 @@ dwg_dynapi_common_set_value (void *restrict _obj,
       }
     else
       dynapi_set_helper (old, f, dwg ? dwg->header.version : R_INVALID, value, is_utf8);
+
+    if (dwg && obj->supertype == DWG_SUPERTYPE_ENTITY && strEQc (fieldname, "ltype"))
+      { // set also isbylayerlt and ltype_flags
+        BITCODE_H ltype = *(BITCODE_H*)value;
+        Dwg_Object_Entity *ent = obj->tio.entity;
+        if (!dwg->header_vars.LTYPE_BYLAYER || !ent->ltype)
+          ;
+        else if (ent->ltype->absolute_ref == dwg->header_vars.LTYPE_BYLAYER->absolute_ref)
+          {
+            ent->isbylayerlt = 1; // r13-r14 only
+            ent->ltype_flags = 0;
+          }
+        else if (dwg->header_vars.LTYPE_BYBLOCK
+                 && ent->ltype->absolute_ref == dwg->header_vars.LTYPE_BYBLOCK->absolute_ref)
+          {
+            ent->isbylayerlt = 0;
+            ent->ltype_flags = 1;
+          }
+        else if (dwg->header_vars.LTYPE_CONTINUOUS
+                 && ent->ltype->absolute_ref == dwg->header_vars.LTYPE_CONTINUOUS->absolute_ref)
+          {
+            ent->isbylayerlt = 0;
+            ent->ltype_flags = 2;
+          }
+        else
+          {
+            ent->isbylayerlt = 0;
+            ent->ltype_flags = 3;
+          }
+      }
     return true;
   }
 }
@@ -2836,7 +3378,7 @@ dwg_dynapi_field_set_value (const Dwg_Data *restrict dwg, /* only needed if unic
 EXPORT char*
 dwg_dynapi_handle_name (const Dwg_Data *restrict dwg, Dwg_Object_Ref *restrict hdl)
 {
-  const Dwg_Version_Type dwg_version = dwg->header.version;
+  const bool is_tu = IS_FROM_TU_DWG (dwg);
   Dwg_Object *obj;
 
 #ifndef HAVE_NONNULL
@@ -2854,7 +3396,7 @@ dwg_dynapi_handle_name (const Dwg_Data *restrict dwg, Dwg_Object_Ref *restrict h
 
     if (!f || !f->is_string)
       return NULL;
-    if (dwg_version >= R_2007 && strNE (f->type, "TF")) /* not TF */
+    if (is_tu && strNE (f->type, "TF")) /* not TF */
       {
         BITCODE_TU wstr = *(BITCODE_TU *)((char *)_obj + f->offset);
         return bit_convert_TU (wstr);
@@ -2961,6 +3503,28 @@ dwg_dynapi_subclass_name (const char *restrict type)
   return name;
 }
 
+EXPORT bool
+dwg_has_subclass (const char *restrict classname, const char *restrict subclass)
+{
+  struct _name_subclasses *f;
+#ifndef HAVE_NONNULL
+  if (!classname || !name)
+    return false;
+#endif
+  f = (struct _name_subclasses *)bsearch (classname, dwg_name_subclasses,
+                                          ARRAY_SIZE (dwg_name_subclasses),
+                                          sizeof (dwg_name_subclasses[0]),
+                                          _name_struct_cmp);
+  if (f) {
+    for (unsigned i = 0; i < @@scalar max_subclasses@@ /* max_subclasses */; i++) {
+      if (!f->subclasses[i]) // already at NULL
+        return false;
+      if (strEQ (subclass, f->subclasses[i]))
+        return true;
+    }
+  }
+  return false;
+}
 /* Local Variables: */
 /* mode: c */
 /* End: */

@@ -493,7 +493,6 @@ dwg_free_variable_no_class (Dwg_Data *restrict dwg, Dwg_Object *restrict obj)
     case DWG_TYPE_ACDSRECORD:
     case DWG_TYPE_ACDSSCHEMA:
     case DWG_TYPE_NPOCOLLECTION:
-    case DWG_TYPE_RAPIDRTRENDERENVIRONMENT:
     case DWG_TYPE_XREFPANELOBJECT:
     default: LOG_ERROR ("Unhandled class %s, fixedtype %d in objects.inc",
                         dwg_type_name (obj->fixedtype), (int)obj->fixedtype);
@@ -530,14 +529,16 @@ int dwg_free_variable_type (Dwg_Data *restrict dwg, Dwg_Object *restrict obj)
 
   if (strNE (obj->dxfname, klass->dxfname))
     {
-      LOG_ERROR ("Wrong %s.type %d for obj [%d]: != %s",  obj->dxfname, obj->type,
-                 obj->index, klass->dxfname);
       // But we know how to handle the UNKNOWN_* types
       if (obj->fixedtype == DWG_TYPE_UNKNOWN_OBJ
           || obj->fixedtype == DWG_TYPE_UNKNOWN_ENT)
         return DWG_ERR_UNHANDLEDCLASS;
       else
-        return dwg_free_variable_no_class (dwg, obj);
+        {
+          LOG_ERROR ("Wrong %s.type %d for obj [%d]: != %s",  obj->dxfname, obj->type,
+                     obj->index, klass->dxfname);
+          return dwg_free_variable_no_class (dwg, obj);
+        }
     }
 
   // global class dispatcher:
@@ -576,7 +577,6 @@ int dwg_free_variable_type_private (Dwg_Object *restrict obj)
     case DWG_TYPE_ACDSRECORD:
     case DWG_TYPE_ACDSSCHEMA:
     case DWG_TYPE_NPOCOLLECTION:
-    case DWG_TYPE_RAPIDRTRENDERENVIRONMENT:
     case DWG_TYPE_XREFPANELOBJECT:
     default: LOG_ERROR ("Unhandled class %s, fixedtype %d in objects.inc",
                         dwg_type_name (obj->fixedtype), (int)obj->fixedtype);
@@ -1226,6 +1226,7 @@ dwg_free_acds (Dwg_Data *dwg)
   Dwg_Object *obj = NULL;
   Bit_Chain *dat = &pdat;
   BITCODE_RL rcount3 = 0, rcount4, vcount;
+  int error = 0;
 
   // clang-format off
   #include "acds.spec"

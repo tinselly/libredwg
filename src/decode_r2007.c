@@ -1,7 +1,7 @@
 /*****************************************************************************/
 /*  LibreDWG - free implementation of the DWG file format                    */
 /*                                                                           */
-/*  Copyright (C) 2010-2020 Free Software Foundation, Inc.                   */
+/*  Copyright (C) 2010-2021 Free Software Foundation, Inc.                   */
 /*                                                                           */
 /*  This library is free software, licensed under the terms of the GNU       */
 /*  General Public License as published by the Free Software Foundation,     */
@@ -628,41 +628,37 @@ read_system_page (Bit_Chain *dat, int64_t size_comp, int64_t size_uncomp,
   BITCODE_RC *pedata; // Pre RS encoded data
   BITCODE_RC *data;   // The data RS unencoded and uncompressed
 
+  if (repeat_count < 0 ||
+      repeat_count > DBG_MAX_COUNT ||
+      (uint64_t)size_comp >= dat->size ||
+      (uint64_t)size_uncomp >= dat->size)
+    {
+      LOG_ERROR ("Invalid r2007 system page: "
+                 "size_comp: %" PRId64 ", size_uncomp: %" PRId64
+                 ", repeat_count: %" PRId64, size_comp, size_uncomp, repeat_count);
+      return NULL;
+    }
   // Round to a multiple of 8
   pesize = ((size_comp + 7) & ~7) * repeat_count;
   // Divide pre encoded size by RS k-value (239)
   block_count = (pesize + 238) / 239;
-  if (!block_count)
+  if (block_count <= 0 || block_count > DBG_MAX_COUNT)
     {
-      LOG_ERROR ("Empty r2007 system page block_count. size_comp: %" PRId64
-                 ", repeat_count: %" PRId64,
-                 size_comp, repeat_count);
+      LOG_ERROR ("Invalid r2007 system page: size_comp: %" PRId64
+                 ", size_uncomp: %" PRId64, size_comp, size_uncomp);
       return NULL;
     }
-
   // Multiply with codeword size (255) and round to a multiple of 8
   page_size = (block_count * 255 + 7) & ~7;
-
-  if (!((uint64_t)size_comp < dat->size &&
-        (uint64_t)size_uncomp < dat->size &&
-        (uint64_t)repeat_count < DBG_MAX_COUNT &&
-        (uint64_t)page_size < DBG_MAX_COUNT))
+  if ((uint64_t)page_size >= DBG_MAX_COUNT || (unsigned long)page_size > dat->size - dat->byte)
     {
-      LOG_ERROR ("Invalid r2007 system page size_comp: %" PRId64
-                 ", size_uncomp: %" PRId64, size_comp, size_uncomp);
+      LOG_ERROR ("Invalid r2007 system page: page_size: %" PRId64, page_size);
       return NULL;
     }
   assert ((uint64_t)size_comp < dat->size);
   assert ((uint64_t)size_uncomp < dat->size);
   assert ((uint64_t)repeat_count < DBG_MAX_COUNT);
   assert ((uint64_t)page_size < DBG_MAX_COUNT);
-
-  if ((unsigned long)page_size > dat->size - dat->byte) // bytes left to read
-    {
-      LOG_ERROR ("Invalid page_size %ld > %lu bytes left", (long)page_size,
-                 dat->size - dat->byte);
-      return NULL;
-    }
   data = (BITCODE_RC *)calloc (size_uncomp + page_size, 1);
   LOG_HANDLE ("Alloc system page of size %" PRId64 "\n", size_uncomp + page_size)
   if (!data)
@@ -1199,6 +1195,7 @@ read_file_header (Bit_Chain *restrict dat,
   dat->byte = 0x80;
   LOG_TRACE ("\n=== File header ===\n")
   memset (file_header, 0, sizeof (r2007_file_header));
+  memset (data, 0, 0x3d8);
   bit_read_fixed (dat, data, 0x3d8);
   pedata = decode_rs (data, 3, 239, 0x3d8);
   if (!pedata)
@@ -1293,7 +1290,7 @@ obj_string_stream (Bit_Chain *restrict dat, Dwg_Object *restrict obj,
   BITCODE_RL data_size = 0;            // in byte
   BITCODE_RL old_size;                 // in byte
   BITCODE_RL old_byte;
-  assert (dat != str);
+  //assert (dat != str); // r2007 objects are the same, just entities not
   old_size = str->size;
   old_byte = str->byte;
 
@@ -1333,7 +1330,7 @@ obj_string_stream (Bit_Chain *restrict dat, Dwg_Object *restrict obj,
   data_size = (BITCODE_RL)bit_read_RS (str);
   LOG_HANDLE (" data_size: %u/0x%x [RS]", data_size, data_size);
 
-  if (data_size & 0x8000 && 0)
+  if (data_size & 0x8000)
     {
       BITCODE_RS hi_size;
       str->byte -= 4;
@@ -1378,13 +1375,14 @@ obj_string_stream (Bit_Chain *restrict dat, Dwg_Object *restrict obj,
 }
 
 void
-section_string_stream (Bit_Chain *restrict dat, BITCODE_RL bitsize,
+section_string_stream (Dwg_Data *restrict dwg, Bit_Chain *restrict dat, BITCODE_RL bitsize,
                        Bit_Chain *restrict str)
 {
   BITCODE_RL start;     // in bits
   BITCODE_RL data_size; // in bits
   BITCODE_B endbit;
-  PRE (R_2010)
+  if (dwg->header.version < R_2010 ||
+      (dwg->header.version == R_2010 && dwg->header.maint_version < 3))
   {
     // r2007: + 24 bytes (sentinel+size+hsize) - 1 bit (endbit)
     start = bitsize + 159;
@@ -1434,6 +1432,7 @@ read_2007_section_classes (Bit_Chain *restrict dat, Dwg_Data *restrict dwg,
   BITCODE_RL size, i;
   BITCODE_BS max_num;
   Bit_Chain sec_dat = { 0 }, str = { 0 };
+  Dwg_Object *obj = NULL;
   int error;
   char c;
 
@@ -1487,7 +1486,7 @@ read_2007_section_classes (Bit_Chain *restrict dat, Dwg_Data *restrict dwg,
       assert (max_num >= 500);
       assert (max_num < 5000);
 
-      section_string_stream (&sec_dat, bitsize, &str);
+      section_string_stream (dwg, &sec_dat, bitsize, &str);
 
       dwg->dwg_class
           = (Dwg_Class *)calloc (dwg->num_classes, sizeof (Dwg_Class));
@@ -1592,7 +1591,7 @@ read_2007_section_header (Bit_Chain *restrict dat, Bit_Chain *restrict hdl_dat,
                      dwg->header_vars.bitsize);
           endbits += dwg->header_vars.bitsize;
           bit_set_position (hdl_dat, endbits);
-          section_string_stream (&sec_dat, dwg->header_vars.bitsize, &str_dat);
+          section_string_stream (dwg, &sec_dat, dwg->header_vars.bitsize, &str_dat);
         }
 
       dwg_decode_header_variables (&sec_dat, hdl_dat, &str_dat, dwg);

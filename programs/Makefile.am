@@ -85,8 +85,10 @@ endif
 TESTS = alive.test
 if !DISABLE_DXF
 TESTS += dxf.test
+if !DISABLE_JSON
 if HAVE_JQ
 TESTS += json.test
+endif
 endif
 if HAVE_JING
 TESTS += svg.test
@@ -141,7 +143,7 @@ AM_CFLAGS += @GCOV_CFLAGS@
 LIBS      += @GCOV_LIBS@
 gcov: $(CHECK)
 	-test -f gcov.log && rm gcov.log
-	$(GCOV) *.gcno | tee -a $(builddir)/gcov.log
+	$(GCOV) -lp *.gcno | tee -a $(builddir)/gcov.log
 
 CLEANFILES  += *.gcov *.gcno *.gcda gcov.log
 endif

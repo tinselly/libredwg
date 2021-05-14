@@ -1,4 +1,4 @@
-// TODO DEBUGGING
+// unstable
 #define DWG_TYPE DWG_TYPE_ASSOCARRAYMODIFYPARAMETERS
 #include "common.c"
 
@@ -6,10 +6,13 @@ void
 api_process (dwg_object *obj)
 {
   int error, isnew;
-  ASSOCARRAYCOMMONPARAMETERS_fields;
+  ASSOCARRAYPARAMETERS_fields;
+  BITCODE_BL numitems;
+  BITCODE_BL numrows;
+  BITCODE_BL numlevels;
 
   Dwg_Version_Type dwg_version = obj->parent->header.version;
-#ifdef DEBUG_CLASSES
+  //#ifdef DEBUG_CLASSES
   dwg_obj_assocarraymodifyparameters *_obj = dwg_object_to_ASSOCARRAYMODIFYPARAMETERS (obj);
   
   CHK_ENTITY_TYPE (_obj, ASSOCARRAYMODIFYPARAMETERS, aap_version, BL);
@@ -38,6 +41,5 @@ api_process (dwg_object *obj)
   CHK_ENTITY_TYPE (_obj, ASSOCARRAYMODIFYPARAMETERS, numitems, BL);
   CHK_ENTITY_TYPE (_obj, ASSOCARRAYMODIFYPARAMETERS, numrows, BL);
   CHK_ENTITY_TYPE (_obj, ASSOCARRAYMODIFYPARAMETERS, numlevels, BL);
-
-#endif
+  //#endif
 }

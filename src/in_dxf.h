@@ -23,8 +23,14 @@
 #include "decode.h"
 #include "dynapi.h"
 
-EXPORT int dwg_read_dxf (Bit_Chain *restrict dat, Dwg_Data *restrict dwg);
-EXPORT int dwg_read_dxfb (Bit_Chain *restrict dat, Dwg_Data *restrict dwg);
+// from dwg_api
+#ifndef _DWG_API_H_
+BITCODE_T dwg_add_u8_input (Dwg_Data *restrict dwg,
+                            const char *restrict u8str) __nonnull_all;
+#endif
+
+EXPORT int dwg_read_dxf (Bit_Chain *restrict dat, Dwg_Data *restrict dwg) __nonnull_all;
+EXPORT int dwg_read_dxfb (Bit_Chain *restrict dat, Dwg_Data *restrict dwg) __nonnull_all;
 
 // global array of [obj -> [fields], ...]
 typedef struct _dxf_field
@@ -35,6 +41,7 @@ typedef struct _dxf_field
 } Dxf_Field;
 
 // to search obj ptr in array
+/*
 typedef struct _dxf_objs
 {
   Dwg_Object *obj;
@@ -42,6 +49,7 @@ typedef struct _dxf_objs
   int size_fields;
   Dxf_Field *fields;
 } Dxf_Objs;
+*/
 
 typedef struct _dxf_pair
 {
@@ -87,12 +95,16 @@ void dxf_add_field (Dwg_Object *restrict obj, const char *restrict name,
 Dxf_Field *dxf_search_field (Dwg_Object *restrict obj,
                              const char *restrict name,
                              const char *restrict type, int dxf);
-
+const Dwg_DYNAPI_field *find_numfield (const Dwg_DYNAPI_field *restrict fields,
+                                       const char *restrict key);
 BITCODE_H find_tablehandle (Dwg_Data *restrict dwg, Dxf_Pair *restrict pair);
-int is_table_name (const char *restrict name);
-int is_textlike (Dwg_Object *restrict obj);
-void in_postprocess_handles (Dwg_Object *restrict obj);
-void in_postprocess_SEQEND (Dwg_Object *restrict obj, BITCODE_BL num_owned, BITCODE_H *owned);
+int is_table_name (const char *restrict name) __nonnull_all;
+int is_textlike (Dwg_Object *restrict obj) __nonnull_all;
+void in_postprocess_handles (Dwg_Object *restrict obj) __nonnull_all;
+void in_postprocess_SEQEND (Dwg_Object *restrict obj, BITCODE_BL num_owned,
+                            BITCODE_H *owned) __nonnull ((1));
+// for in_dxf and in_json
+unsigned in_hex2bin (unsigned char *restrict dest, char *restrict src, unsigned destlen) __nonnull_all;
 
 BITCODE_RC dxf_find_lweight (const int lw);
 
@@ -169,13 +181,7 @@ BITCODE_RC dxf_find_lweight (const int lw);
 #define STRADD_T(field, string)                                               \
   if (string)                                                                 \
     {                                                                         \
-      if (dat->version >= R_2007)                                             \
-        field = (char*)bit_utf8_to_TU (string);                               \
-      else                                                                    \
-        {                                                                     \
-          field = (char*)malloc (strlen (string) + 1);                        \
-          strcpy (field, string);                                             \
-        }                                                                     \
+      field = dwg_add_u8_input (dwg, string);                                 \
     }
 
 #define UPGRADE_ENTITY(FROM, TO)                                              \

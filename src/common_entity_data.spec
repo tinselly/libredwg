@@ -52,7 +52,7 @@
 #endif
 #ifndef IS_FREE
       LOG_TRACE ("bitsize: " FORMAT_BL " @%lu.%u\n", obj->bitsize,
-                dat->byte - 4, dat->bit)
+                 dat->byte, dat->bit)
 #endif
 #ifdef IS_DECODER
     if (obj->bitsize > obj->size * 8)
@@ -211,7 +211,7 @@
   }
 
   SINCE (R_2000) {
-    // DXF later after 6, see common_entity_handle_data
+    // DXF later after 6, see common_entity_handle_data.spec
     // Ideally CMC 60 should be deferred after layer 8, before linewt 370 also
 #ifndef IS_DXF
     FIELD_RC (linewt, 370);

@@ -1,6 +1,6 @@
 ## Makefile.am
 ##
-## Copyright (C) 2010-2019 Free Software Foundation, Inc.
+## Copyright (C) 2010-2021 Free Software Foundation, Inc.
 ##
 ## This file is part of LibreDWG.
 ##
@@ -21,12 +21,15 @@ WARN_CFLAGS = @WARN_CFLAGS@
 AM_CFLAGS   = -I$(top_srcdir)/include -I$(top_srcdir)/src $(WARN_CFLAGS)
 LDADD       = $(top_builddir)/src/libredwg.la -lm
 
+if USE_WRITE
+bin_PROGRAMS     = dwgadd
+endif
 check_PROGRAMS   = load_dwg dwg2svg2 dwgfuzz
-EXTRA_PROGRAMS   = unknown bd bits
+EXTRA_PROGRAMS   = unknown bd bits llvmfuzz llvmfuzz_standalone
 
 load_dwg_SOURCES = load_dwg.c
 dwg2svg2_SOURCES = dwg2svg2.c
-dwgfuzz_SOURCES  = dwgfuzz.c
+dwgadd_SOURCES   = dwgadd.c
 unknown_SOURCES  = unknown.c
 # alldxf_0.inc alldxf_1.inc alldxf_2.inc alldwg.inc bd-unknown.inc
 unknown_LDADD    = $(top_builddir)/src/libredwg.la \
@@ -35,6 +38,27 @@ bd_SOURCE        = bd.c
 bd_LDADD         = $(top_builddir)/src/libredwg.la $(top_builddir)/src/bits.lo -lm
 bits_SOURCE      = bits.c
 bits_LDADD       = $(top_builddir)/src/libredwg.la $(top_builddir)/src/bits.lo -lm
+dwgfuzz_SOURCES  = dwgfuzz.c
+#would need HAVE_ASAN am var set
+#dwgfuzz_CFLAGS             = $(CFLAGS) $(AM_CFLAGS) -fsanitize=address,undefined -fno-omit-frame-pointer
+llvmfuzz_SOURCES            = llvmfuzz.c
+llvmfuzz_LDADD              = $(top_builddir)/src/libredwg.la $(top_builddir)/src/bits.lo -lm
+llvmfuzz_standalone_SOURCES = llvmfuzz.c
+if HAVE_ASAN_OR_LINUX
+# needs CC=clang
+llvmfuzz_CFLAGS             = $(CFLAGS) $(AM_CFLAGS) -DHAVE_ASAN \
+                              -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer
+# cflags already includes asan
+if HAVE_ASAN
+llvmfuzz_standalone_CFLAGS  = $(CFLAGS) $(AM_CFLAGS) -DSTANDALONE
+else
+llvmfuzz_standalone_CFLAGS  = $(CFLAGS) $(AM_CFLAGS) -DSTANDALONE -DHAVE_ASAN \
+                              -fsanitize=address,undefined -fno-omit-frame-pointer
+endif
+else
+llvmfuzz_standalone_CFLAGS  = $(CFLAGS) $(AM_CFLAGS) -DSTANDALONE
+endif
+llvmfuzz_standalone_LDADD   = $(top_builddir)/src/libredwg.la $(top_builddir)/src/bits.lo -lm
 
 all: $(check_PROGRAMS)
 
@@ -114,27 +138,36 @@ alldxf_unknowns = \
 	alldxf_ACDBASSOCVALUEDEPENDENCY.inc \
 	alldxf_ACDBASSOCVARIABLE.inc \
 	alldxf_ACDBASSOCVERTEXACTIONPARAM.inc \
-	alldxf_ACDB_BLKREFOBJECTCONTEXTDATA_CLASS.inc \
 	alldxf_ACDBDETAILVIEWSTYLE.inc \
+	alldxf_ACDBPERSSUBENTMANAGER.inc \
+	alldxf_ACDBPOINTCLOUDCOLORMAP.inc \
+	alldxf_ACDBSECTIONVIEWSTYLE.inc \
+	alldxf_ACDB_BLKREFOBJECTCONTEXTDATA_CLASS.inc \
+	alldxf_ACDB_BLOCKREPRESENTATION_DATA.inc \
+	alldxf_ACDB_DYNAMICBLOCKPROXYNODE.inc \
 	alldxf_ACDB_LEADEROBJECTCONTEXTDATA_CLASS.inc \
 	alldxf_ACDB_MLEADEROBJECTCONTEXTDATA_CLASS.inc \
 	alldxf_ACDB_MTEXTATTRIBUTEOBJECTCONTEXTDATA_CLASS.inc \
 	alldxf_ACDB_MTEXTOBJECTCONTEXTDATA_CLASS.inc \
-	alldxf_ACDBPERSSUBENTMANAGER.inc \
-	alldxf_ACDBSECTIONVIEWSTYLE.inc \
 	alldxf_ACDB_TEXTOBJECTCONTEXTDATA_CLASS.inc \
 	alldxf_ACMECOMMANDHISTORY.inc \
 	alldxf_ACMESCOPE.inc \
 	alldxf_ACMESTATEMGR.inc \
 	alldxf_ACSH_BOX_CLASS.inc \
+	alldxf_ACSH_CHAMFER_CLASS.inc \
 	alldxf_ACSH_EXTRUSION_CLASS.inc \
 	alldxf_ACSH_HISTORY_CLASS.inc \
+	alldxf_ACSH_LOFT_CLASS.inc \
+	alldxf_ACSH_REVOLVE_CLASS.inc \
 	alldxf_ACSH_SWEEP_CLASS.inc \
 	alldxf_ARC_DIMENSION.inc \
 	alldxf_ASSOCDIMDEPENDENCYBODY.inc \
+	alldxf_BLOCKALIGNMENTGRIP.inc \
 	alldxf_BLOCKGRIPLOCATIONCOMPONENT.inc \
+	alldxf_BLOCKSTRETCHACTION.inc \
 	alldxf_BLOCKVISIBILITYGRIP.inc \
 	alldxf_BLOCKVISIBILITYPARAMETER.inc \
+	alldxf_BLOCKXYGRIP.inc \
 	alldxf_CELLSTYLEMAP.inc \
 	alldxf_CSACDOCUMENTOPTIONS.inc \
 	alldxf_DATALINK.inc \
@@ -153,20 +186,27 @@ alldxf_unknowns = \
 	alldxf_PLANESURFACE.inc \
 	alldxf_PLOTSETTINGS.inc \
 	alldxf_RAPIDRTRENDERSETTINGS.inc \
+	alldxf_RENDERENTRY.inc \
+	alldxf_RENDERGLOBAL.inc \
 	alldxf_REVOLVEDSURFACE.inc \
-	alldxf_SECTION_MANAGER.inc \
 	alldxf_SECTIONOBJECT.inc \
+	alldxf_SECTION_MANAGER.inc \
 	alldxf_SECTION_SETTINGS.inc \
+	alldxf_SKYLIGHT_BACKGROUND.inc \
 	alldxf_SUN.inc \
 	alldxf_SWEPTSURFACE.inc \
 	alldxf_TABLEGEOMETRY.inc \
 	alldxf_TABLESTYLE.inc \
-	alldxf_VISUALSTYLE.inc
+	alldxf_VISUALSTYLE.inc \
+	alldxf_WIPEOUT.inc
 
 EXTRA_DIST = unknown.h alldxf_0.inc alldxf_1.inc alldxf_2.inc alldwg.inc $(alldxf_unknowns)
-EXTRA_DIST += log_unknown_dxf.pl log_unknown.pl bd-unknown.pl unstable.pm
-EXTRA_DIST += load_dwg.py unknown.pi ACAD_EVALUATION_GRAPH.pi
+EXTRA_DIST += log_unknown_dxf.pl log_unknown.pl bd-unknown.pl unstable.pm dwgadd.pod
+EXTRA_DIST += unknown.pi ACAD_EVALUATION_GRAPH.pi
 EXTRA_man1_MANS = $(srcdir)/dwgfuzz.1
+dist_man1_MANS = $(srcdir)/dwgadd.1
+dist_man5_MANS = $(srcdir)/dwgadd.5
+dist_data_DATA = dwgadd.example load_dwg.py
 
 CLEANFILES = {example,sample}_2000.svg alldwg.inc~ \
 	     alldxf_0.inc~ alldxf_1.inc~ alldxf_2.inc~
@@ -179,14 +219,17 @@ MAINTAINERCLEANFILES  = *_flymake.[ch] *~ *.i
 
 dsymutil:
 	for e in $(check_PROGRAMS) $(EXTRA_PROGRAMS); do dsymutil $$e; done
-man: $(EXTRA_man1_MANS)
+man: $(dist_man1_MANS) $(EXTRA_man1_MANS) $(dist_man5_MANS)
 
 if !HAVE_MINGW_CROSS
 # Note: These rules do not work cross-compiled
-regen-man: dwgfuzz
-	-for p in $(EXTRA_man1_MANS); do \
+regen-man: dwgfuzz dwgadd
+	-for p in $(dist_man1_MANS) $(EXTRA_man1_MANS); do \
 	  base=`basename $$p .1`; \
 	  help2man -p $(PACKAGE_NAME) -o $$p ./$$base$(EXEEXT); done
+	-for p in $(dist_man5_MANS); do \
+	  base=`basename $$p .5`; \
+	  pod2man --release="@VERSION@" --section=5 --center="User Commands" $(srcdir)/$$base.pod >$$p; done
 endif
 
 # emacs flymake-mode
@@ -199,7 +242,7 @@ AM_CFLAGS += @GCOV_CFLAGS@
 LIBS      += @GCOV_LIBS@
 gcov: $(CHECK)
 	-test -f gcov.log && rm gcov.log
-	$(GCOV) *.gcno | tee -a $(builddir)/gcov.log
+	$(GCOV) -lp *.gcno | tee -a $(builddir)/gcov.log
 
 CLEANFILES  += *.gcov *.gcno *.gcda gcov.log
 endif

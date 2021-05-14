@@ -1,7 +1,7 @@
 /*****************************************************************************/
 /*  LibreDWG - free implementation of the DWG file format                    */
 /*                                                                           */
-/*  Copyright (C) 2009-2020 Free Software Foundation, Inc.                   */
+/*  Copyright (C) 2009-2021 Free Software Foundation, Inc.                   */
 /*                                                                           */
 /*  This library is free software, licensed under the terms of the GNU       */
 /*  General Public License as published by the Free Software Foundation,     */
@@ -41,46 +41,69 @@
    GCC30_DIAG_IGNORE (-Wshadow)
 */
 #if defined(__GNUC__)
+#  define _GNUC_VERSION ((__GNUC__ * 100) + __GNUC_MINOR__)
 #  define CC_DIAG_PRAGMA(x) _Pragma (#x)
-#  define CLANG_DIAG_IGNORE(w)
-#  define CLANG_DIAG_RESTORE
-#elif defined(__clang__) || defined(__clang)
-#  define CC_DIAG_PRAGMA(x) _Pragma (#x)
+#else
+#  define _GNUC_VERSION 0
+#  define CC_DIAG_PRAGMA(x)
+#endif
+
+/*
+#define _STR(x)  #x
+#define STR(x)_STR(x)
+#pragma message("_GNUC_VERSION " STR(_GNUC_VERSION))
+*/
+
+// clang-specifics (rarely needed, as they mimic GCC dignostics closely, even down to bugs)
+#if defined(__clang__) || defined(__clang)
+#  define HAVE_CLANG
 #  define CLANG_DIAG_IGNORE(x)                                                \
     _Pragma ("clang diagnostic push")                                         \
     CC_DIAG_PRAGMA (clang diagnostic ignored #x)
 #  define CLANG_DIAG_RESTORE _Pragma ("clang diagnostic pop")
-#  define GCC31_DIAG_IGNORE(w)
-#  define GCC30_DIAG_IGNORE(w)
+#elif defined(__GNUC__)
+#  define CLANG_DIAG_IGNORE(w)
+#  define CLANG_DIAG_RESTORE
 #else
-#  define CC_DIAG_IGNORE(w)
+// MSVC has the __pragma() macro instead
 #  define CLANG_DIAG_IGNORE(w)
 #  define CLANG_DIAG_RESTORE
 #endif
-/* for GCC46_DIAG_IGNORE (-Wdeprecated-declarations) inside functions */
-#if (defined(__GNUC__) && ((__GNUC__ * 100) + __GNUC_MINOR__) >= 460)         \
-    || defined(__clang__) || defined(__clang)
+
+/* for GCC46_DIAG_IGNORE (-Wdeprecated-declarations) or (-Wformat-nonliteral),
+   stacked inside functions.
+   clang 10.2 defines gcc compat version 4.2 though (402) */
+#if _GNUC_VERSION >= 460 || (defined(HAVE_CLANG) && _GNUC_VERSION >= 400)
+#  define HAVE_CC_DIAG_STACK
 #  define GCC46_DIAG_IGNORE(x)                                                \
      _Pragma ("GCC diagnostic push")                                          \
      CC_DIAG_PRAGMA (GCC diagnostic ignored #x)
 #  define GCC46_DIAG_RESTORE _Pragma ("GCC diagnostic pop")
 #else
+#  undef HAVE_CC_DIAG_STACK
 #  define GCC46_DIAG_IGNORE(w)
 #  define GCC46_DIAG_RESTORE
 #endif
+
+/* For GCC30_DIAG_IGNORE (-Wformat-nonliteral) outside functions */
+#if _GNUC_VERSION >= 300 && !defined HAVE_CC_DIAG_STACK
+#  define GCC30_DIAG_IGNORE(x) CC_DIAG_PRAGMA (GCC diagnostic ignored #x)
+#else
+#  define GCC30_DIAG_IGNORE(w)
+#endif
 /* for GCC31_DIAG_IGNORE (-Wdeprecated-declarations) outside functions */
-#if (defined(__GNUC__) && ((__GNUC__ * 100) + __GNUC_MINOR__) >= 310          \
-     && ((__GNUC__ * 100) + __GNUC_MINOR__) < 460)
+#if _GNUC_VERSION >= 310 && !defined HAVE_CC_DIAG_STACK
 #  define GCC31_DIAG_IGNORE(x) CC_DIAG_PRAGMA (GCC diagnostic ignored #x)
 #else
 #  define GCC31_DIAG_IGNORE(w)
 #endif
-/* For GCC30_DIAG_IGNORE (-Wformat-nonliteral) outside functions */
-#if (defined(__GNUC__) && ((__GNUC__ * 100) + __GNUC_MINOR__) >= 300          \
-     && ((__GNUC__ * 100) + __GNUC_MINOR__) < 460)
-#  define GCC30_DIAG_IGNORE(x) CC_DIAG_PRAGMA (GCC diagnostic ignored #x)
+/* for GCC33_DIAG_IGNORE (-Wswitch-enum) outside functions
+   -Wswitch-enum appeared first with gcc 3.3.6
+ */
+#if _GNUC_VERSION >= 330 && !defined HAVE_CC_DIAG_STACK
+#  define GCC33_DIAG_IGNORE(x) CC_DIAG_PRAGMA (GCC diagnostic ignored #x)
 #else
-#  define GCC30_DIAG_IGNORE(w)
+#  define GCC33_DIAG_IGNORE(w)
 #endif
 
 #ifndef __has_feature
@@ -104,13 +127,15 @@
 
 /* The __nonnull function attribute marks pointer arguments which
    must not be NULL.  */
-#if (defined(__GNUC__) && ((__GNUC__ * 100) + __GNUC_MINOR__) >= 303)
+#if _GNUC_VERSION >= 303 && !defined(__cplusplus)
 #  undef __nonnull
 #  define __nonnull(params) __attribute__ ((__nonnull__ params))
+#  define __nonnull_all __attribute__ ((__nonnull__))
 #  define HAVE_NONNULL
 #else
-#  undef HAVE_NONNULL
 #  define __nonnull(params)
+#  define __nonnull_all
+#  undef HAVE_NONNULL
 #endif
 
 #ifdef HAVE_FUNC_ATTRIBUTE_MALLOC
@@ -123,6 +148,12 @@
 #  define RETURNS_NONNULL __attribute__ ((returns_nonnull))
 #else
 #  define RETURNS_NONNULL
+#endif
+
+#ifdef HAVE_FUNC_ATTRIBUTE_NORETURN
+#  define ATTRIBUTE_NORETURN __attribute__ ((noreturn))
+#else
+#  define ATTRIBUTE_NORETURN
 #endif
 
 #ifndef EXPORT
@@ -264,6 +295,9 @@ char *strrplc (const char *s, const char *from, const char *to);
 #define memBEGINc(s1, s2)                                                     \
   (strlen (s1) >= sizeof (s2 "") - 1 && !memcmp (s1, s2, sizeof (s2 "") - 1))
 
+#ifndef M_PI
+#  define M_PI 3.14159265358979323846
+#endif
 #ifndef M_PI_2
 #  define M_PI_2 1.57079632679489661923132169163975144
 #endif
@@ -298,5 +332,14 @@ void *memmem (const void *h0, size_t k, const void *n0, size_t l) __nonnull((1, 
 // returns the first
 #define SHIFT_HV(_obj, numfield, hvfield) shift_hv (_obj->hvfield, &_obj->numfield)
 BITCODE_H shift_hv (BITCODE_H *hv, BITCODE_BL *num_p);
+
+// used in dwg.spec
+Dwg_Handle *dwg_find_first_type_handle (Dwg_Data *restrict dwg,
+                                        enum DWG_OBJECT_TYPE type);
+
+// <path-to>/dxf.ext => copy of "dxf", "ext"
+// Returns a malloc'ed copy of basename, and
+// sets ext to the char behind the last "." of filepath
+char *split_filepath (const char *filepath, char **extp);
 
 #endif

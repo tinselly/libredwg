@@ -1,6 +1,6 @@
 dnl configure.ac
 
-dnl Copyright (C) 2010, 2014-2015, 2018-2020 Free Software Foundation, Inc.
+dnl Copyright (C) 2010, 2014-2015, 2018-2021 Free Software Foundation, Inc.
 dnl
 dnl This program is free software, licensed under the terms of the GNU
 dnl General Public License as published by the Free Software Foundation,
@@ -28,7 +28,7 @@ dnl one place. For information on how to properly maintain the library
 dnl version information, refer to the libtool manual, section "Updating
 dnl library version information":
 dnl http://www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html
-AC_SUBST([LIBREDWG_SO_VERSION], [0:11:0])
+AC_SUBST([LIBREDWG_SO_VERSION], [0:12:0])
 AC_SUBST([TARBALL_VERSION_FILE])
 
 AC_CONFIG_MACRO_DIR([m4])
@@ -95,12 +95,20 @@ AC_SUBST([PCRE2_LIBS])
   
 dnl PKG_CHECK_MODULES([LIBXML2], [libxml-2.0], [],
 dnl    AC_MSG_ERROR([Install libxml-2.0 first]))
-if pkg-config --exists libxml-2.0; then
-  XML2_CFLAGS=`pkg-config libxml-2.0 --cflags`
-  XML2_LIBS=`pkg-config libxml-2.0 --libs`
-fi
-AC_SUBST([XML2_CFLAGS])
-AC_SUBST([XML2_LIBS])
+AC_CHECK_LIB([xml2],[newXMLEntity],
+  [have_libxml2=yes;
+   XML2_LIBS=-lxml2;
+   AC_SUBST([XML2_CFLAGS])
+   AC_SUBST([XML2_LIBS])
+   ],
+  [if pkg-config --exists libpcre2; then
+    have_libxml2=yes;
+    XML2_CFLAGS=`pkg-config libxml-2.0 --cflags`
+    XML2_LIBS=`pkg-config libxml-2.0 --libs`
+  else
+    AC_MSG_WARN([libxml-2.0 for test/xmlsuite not found])
+  fi])
+AM_CONDITIONAL([HAVE_LIBXML2], [test x$have_libxml2 = xyes])
 
 dnl Checks for header files
 AC_HEADER_STDC
@@ -133,8 +141,20 @@ case $CFLAGS in
      *-fsanitize=undefined*)   ax_cv_have_aligned_access_required=yes  ;;
      *-fsanitize=*,undefined*) ax_cv_have_aligned_access_required=yes  ;;
 esac
+case $CC in
+     *-fsanitize=undefined*)   ax_cv_have_aligned_access_required=yes  ;;
+     *-fsanitize=*,undefined*) ax_cv_have_aligned_access_required=yes  ;;
+esac
 AX_CHECK_ALIGNED_ACCESS_REQUIRED
 
+case $CC in
+     *-fsanitize=address*)     HAVE_ASAN=yes ;;
+     *-fsanitize=*,address*)   HAVE_ASAN=yes ;;
+esac
+case $CC in
+     *-fsanitize=leak*)        HAVE_ASAN=yes ;;
+     *-fsanitize=*,leak*)      HAVE_ASAN=yes ;;
+esac
 case $CFLAGS in
      *-fsanitize=address*)     HAVE_ASAN=yes ;;
      *-fsanitize=*,address*)   HAVE_ASAN=yes ;;
@@ -144,6 +164,7 @@ case $CFLAGS in
      *-fsanitize=*,leak*)      HAVE_ASAN=yes ;;
 esac
 AC_SUBST(HAVE_ASAN)
+AM_CONDITIONAL([HAVE_ASAN], [test -n "$HAVE_ASAN"])
 
 AC_TYPE_SIZE_T
 AC_TYPE_INT16_T
@@ -173,15 +194,18 @@ if test x$ax_is_release = xyes; then
 fi
 AM_CONDITIONAL([IS_RELEASE], [test x$ax_is_release = xyes])
 
-dnl Disable unwanted warnings here. These should be fixed before 1.0
+dnl Disable unwanted warnings here
 enable_Werror=no
 ax_enable_compile_warnings=yes
+dnl This is too intrusive for our DWG_TYPE_* switches
+ax_cv_check_cflags__Wswitch_enum=no
 if test x$enable_shared = xyes -a x$ac_compiler_gnu = xyes; then
   AX_COMPILER_FLAGS([WARN_CFLAGS],[AM_LDFLAGS],[$ax_is_release],
-    [-fno-common -fvisibility=hidden -fno-semantic-interposition])
+    [-fno-common -fvisibility=hidden -fno-semantic-interposition -fno-strict-aliasing \
+     -fno-delete-null-pointer-checks -fno-strict-overflow])
 else
   AX_COMPILER_FLAGS([WARN_CFLAGS],[AM_LDFLAGS],[$ax_is_release],
-    [-fno-common -fvisibility=hidden])
+    [-fno-common -fvisibility=hidden -fno-strict-aliasing -fno-delete-null-pointer-checks -fno-strict-overflow])
 fi
 dnl if test x$ax_cv_check_cflags__Wunused_but_set_variable = xyes; then
 dnl   WARN_CFLAGS="$WARN_CFLAGS -Wno-unused-but-set-variable"
@@ -208,6 +232,7 @@ AX_GCC_FUNC_ATTRIBUTE(ms_format)
 AX_GCC_FUNC_ATTRIBUTE(format)
 AX_GCC_FUNC_ATTRIBUTE(malloc)
 AX_GCC_FUNC_ATTRIBUTE(returns_nonnull)
+AX_GCC_FUNC_ATTRIBUTE(noreturn)
 
 dnl until we can make a release, favor no -O2 optims.
 dnl it's fast enough and better for debugging.
@@ -249,17 +274,25 @@ AC_CHECK_FUNCS([scandir],[],
 AC_CHECK_FUNCS([floor sqrt])
 AC_CHECK_LIB([m],[floor])
 AC_CHECK_LIB([m],[sqrt])
+AC_CHECK_FUNCS([sincos])
 AC_CHECK_FUNCS([memchr memmove strcasecmp strchr strstr strrchr strtol strtoul strtoull strnlen])
 AC_CHECK_FUNCS([memmem],[],
   AC_MSG_WARN([memmem not found. Using a slower workaround.]))
 AC_CHECK_FUNCS([wcslen wcsnlen wcscpy wcscmp wcsstr])
+dnl try the secure extensions
+$as_echo '#define __STDC_WANT_LIB_EXT1__  1' >>confdefs.h
+AC_CHECK_FUNCS([sscanf_s],[],
+  AC_MSG_WARN([No secure sscanf_s found. dwgfuzz -add will produce false positives.]))
+dnl and undo it
+$GREP -v '__STDC_WANT_LIB_EXT1__' confdefs.h > confdefs.h.tmp
+mv confdefs.h.tmp confdefs.h
 
 dnl mingw-w64 7.0 bug with _FORTIFY_SOURCE, need -lssp
 case $host in
  *-w64-mingw32)
    case $CFLAGS in
      *-fstack-protector*) ;;
-     *) CFLAGS="$CFLAGS -fstack-protector" ;;
+     *) CFLAGS="$CFLAGS -fstack-protector" LIBS="$LIBS -lssp" ;;
    esac
    ;;
 esac
@@ -286,9 +319,11 @@ AC_ARG_ENABLE([write],AS_HELP_STRING([--disable-write],[
     Disable write support (default: no).]),[],[enable_write=yes])
 AM_CONDITIONAL([USE_WRITE], [test x$enable_write != xno])
 AS_IF([test x$enable_write != xno],
-  AC_DEFINE([USE_WRITE],1,[Undefine to disable write support.])
-  AC_MSG_RESULT([no (default)]),
-  AC_MSG_RESULT([yes]))
+  [AC_DEFINE([USE_WRITE],1,[Undefine to disable write support.])
+   AC_SUBST(DISABLE_WRITE, 0)
+   AC_MSG_RESULT([no (default)])],
+  [AC_SUBST(DISABLE_WRITE, 1)
+   AC_MSG_RESULT([yes])])
 
 dnl Feature: --enable-trace
 AC_MSG_CHECKING([--enable-trace])
@@ -310,10 +345,21 @@ AC_CHECK_FUNCS([setenv],[],
 dnl --disable-dxf only useful for faster debug/test cycles
 AC_MSG_CHECKING([--disable-dxf])
 AC_ARG_ENABLE([dxf],AS_HELP_STRING([--disable-dxf],[
-    Disable DXF and other in/out modules (default: no).]),[],[enable_dxf=yes])
+    Disable DXF, JSON and other in/out modules (default: no).]),[],[enable_dxf=yes])
 AM_CONDITIONAL([DISABLE_DXF], [test x$enable_dxf = xno])
 AS_IF([test x$enable_dxf = xno],
-  AC_DEFINE([DISABLE_DXF],1,[Define to disable DXF and other in/out modules.])
+  AC_DEFINE([DISABLE_DXF],1,[Define to disable DXF, JSON and other in/out modules.])
+  AC_MSG_RESULT([yes]),
+  AC_MSG_RESULT([no (default)]))
+
+dnl --disable-json only useful for slim libraries (i.e. SolveSpace)
+AC_MSG_CHECKING([--disable-json])
+AC_ARG_ENABLE([json],AS_HELP_STRING([--disable-json],[
+    Disable JSON and GeoJSON in/out modules (default: no).]),[],[enable_json=yes])
+AM_CONDITIONAL([DISABLE_JSON], [test x$enable_json = xno])
+AS_IF([test x$enable_json = xno],
+  AC_DEFINE([DISABLE_JSON],1,[Define to disable JSON and GeoJSON in/out modules.])
+  AC_SUBST(DISABLE_JSON, 1)
   AC_MSG_RESULT([yes]),
   AC_MSG_RESULT([no (default)]))
 
@@ -352,23 +398,43 @@ if test "x$enable_gcov" = "xtrue" ; then
 	dnl libtool 1.5.22 and lower strip -fprofile-arcs from the flags
 	dnl passed to the linker, which is a bug; -fprofile-arcs implicitly
 	dnl links in -lgcov, so we do it explicitly here for the same effect
-	GCOV_LIBS=-lgcov
+	GCOV_LIBS="-lgcov"
 	AC_SUBST(GCOV_LIBS)
 else
 	AC_MSG_RESULT([no (default)])
 fi
 AM_CONDITIONAL(ENABLE_GCOV, test "x$enable_gcov" = "xtrue")
 
+AC_CHECK_PROGS([GPERF], [gperf])
+if test -n "$GPERF"
+then
+    AC_MSG_CHECKING([GPERF version])
+    [GPERF_VERSION=`"$GPERF" --version | head -n1 2>&1 | sed 's,GNU gperf ,,'`]
+    GPERF_MINOR="`echo $GPERF_VERSION | cut -f2 -d.`"
+    case $GPERF_VERSION in
+      1.*) GPERF_VERSION=$((100+$GPERF_MINOR)) ;;
+      2.*) GPERF_VERSION=$((200+$GPERF_MINOR)) ;;
+      3.*) GPERF_VERSION=$((300+$GPERF_MINOR)) ;;
+      4.*) GPERF_VERSION=$((400+$GPERF_MINOR)) ;;
+    esac
+    AC_MSG_RESULT([$GPERF_VERSION])
+    AC_DEFINE_UNQUOTED([GPERF_VERSION],[$GPERF_VERSION],
+       [versions earlier than 301 will have no size_t])
+fi
+AC_SUBST(GPERF)
+AC_SUBST(GPERF_VERSION)
+AM_CONDITIONAL(HAVE_GPERF, test -n "$GPERF")
+
 AC_MSG_CHECKING([for latest clang-format])
 CLANG_FORMAT=
-for clangfmt in clang-format{-mp,}{-devel,-{8,7,6,5,4,3}{,.9,.8,.7,.6,.5,.4,.3,.2,.1,.0},}
+for clangfmt in clang-format{,-mp}{,-devel,-{12,11,10,9,8,7,6,5,4,3}{,.9,.8,.7,.6,.5,.4,.3,.2,.1,.0}}
 do
     if which "$clangfmt" &>/dev/null; then
         CLANG_FORMAT="$clangfmt"
         break
     fi
 done
-if test -z $CLANG_FORMAT; then
+if test -z "$CLANG_FORMAT"; then
     if which indent &>/dev/null; then
         CLANG_FORMAT="indent"
     else
@@ -393,6 +459,15 @@ if test "x$host_os" = "xmingw32" -a "x$build_os" != "xmingw32"; then
    fi
 fi
 AM_CONDITIONAL([HAVE_WINE], [test -n "$WINE"])
+AM_CONDITIONAL([HAVE_CYGWIN], [test x$host_os = xcygwin32 -o x$host_os" = "xcygwin64])
+if test -n "$HAVE_ASAN"
+then
+        HAVE_ASAN_OR_LINUX=1
+elif test x$host_os = xlinux-gnu
+then
+        HAVE_ASAN_OR_LINUX=1
+fi
+AM_CONDITIONAL([HAVE_ASAN_OR_LINUX],[test -n "$HAVE_ASAN_OR_LINUX"])
 
 dnl Optional SWIG + python bindings
 dnl Feature: --disable-python or --enable-python=python3.6
@@ -438,6 +513,22 @@ else
       fi
     fi
 fi
+
+if test x$enable_python != xno && test -n "$XML2_LIBS"; then
+  AC_MSG_CHECKING([for the libxml2 Python package])
+  ac_python_libxml2_result=`$PYTHON -c "import libxml2" 2>&1`
+  if test $? -eq 0; then
+    ac_have_python_libxml2=1
+    AC_MSG_RESULT([yes])
+  else
+    ac_have_python_libxml2=
+    AC_MSG_RESULT([no])
+    AC_MSG_WARN([disable test/xmlsuite.
+The import error was:
+$ac_python_libxml2_result])
+  fi
+fi
+AM_CONDITIONAL([HAVE_PYTHON_LIBXML2], [test x$ac_have_python_libxml2 = x1])
 
 if test -n "$PERL"; then
   ac_cv_perl="$PERL"

@@ -14,11 +14,17 @@
 /* Define to disable bindings. */
 #undef DISABLE_BINDINGS
 
-/* Define to disable DXF and other in/out modules. */
+/* Define to disable DXF, JSON and other in/out modules. */
 #undef DISABLE_DXF
+
+/* Define to disable JSON and GeoJSON in/out modules. */
+#undef DISABLE_JSON
 
 /* Define to 1 if a shared library will be built */
 #undef ENABLE_SHARED
+
+/* versions earlier than 301 will have no size_t */
+#undef GPERF_VERSION
 
 /* Define if pointers to integers require aligned access */
 #undef HAVE_ALIGNED_ACCESS_REQUIRED
@@ -62,6 +68,9 @@
 
 /* Define to 1 if the system has the `ms_format' function attribute */
 #undef HAVE_FUNC_ATTRIBUTE_MS_FORMAT
+
+/* Define to 1 if the system has the `noreturn' function attribute */
+#undef HAVE_FUNC_ATTRIBUTE_NORETURN
 
 /* Define to 1 if the system has the `returns_nonnull' function attribute */
 #undef HAVE_FUNC_ATTRIBUTE_RETURNS_NONNULL
@@ -125,8 +134,14 @@
 /* Define to 1 if you have the `setenv' function. */
 #undef HAVE_SETENV
 
+/* Define to 1 if you have the `sincos' function. */
+#undef HAVE_SINCOS
+
 /* Define to 1 if you have the `sqrt' function. */
 #undef HAVE_SQRT
+
+/* Define to 1 if you have the `sscanf_s' function. */
+#undef HAVE_SSCANF_S
 
 /* Define to 1 if `stat' has the bug that it succeeds when given the
    zero-length file name argument. */

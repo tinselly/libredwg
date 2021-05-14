@@ -22,14 +22,12 @@
 #include <math.h>
 #include <sys/stat.h>
 
-static unsigned int loglevel;
-#define DWG_LOGLEVEL loglevel
-#include "../../src/config.h"
-#include "../../src/common.h"
-#include "../../src/decode.h"
+#include "config.h"
+#include "common.h"
+#include "decode.h"
+#include "tests_common.h"
 #include "dwg.h"
 #include "dwg_api.h"
-#include "tests_common.h"
 
 int g_counter;
 #define MAX_COUNTER 10
@@ -365,7 +363,7 @@ test_subclass (const Dwg_Data *restrict dwg, const void *restrict ptr,
               }
             else
               fail ("%s[%d].%s: %lX <=> \"%s\" [H]", fieldname, index, key,
-                    (unsigned long)value, f->value);
+                    l, f->value);
           }
       }
       break;
@@ -767,7 +765,7 @@ test_object (const Dwg_Data *restrict dwg, const Dwg_Object *restrict obj,
                   }
                 else
                   fail ("%s.%s: %lX <=> \"%s\" [H %d]", name, f->name,
-                        (unsigned long)value, f->value, field.dxf);
+                        l, f->value, field.dxf);
               }
           }
           break;
@@ -789,15 +787,15 @@ test_dxf (const struct _unknown_dxf *dxf, const char *restrict name,
   static Dwg_Data dwg;
   BITCODE_BL i;
   char *trace;
+  int tracelevel = 0;
 
-  loglevel = 0;
   trace = getenv ("LIBREDWG_TRACE");
   if (trace)
-    loglevel = atoi (trace);
+    tracelevel = atoi (trace);
 
-  printf ("%s %X %s\n", dxf->name, dxf->handle, dwgfile);
+  loglevel = is_make_silent() ? 0 : MAX (tracelevel, 2);
+  LOG_TRACE ("%s %X %s\n", dxf->name, dxf->handle, dwgfile);
   num = passed = failed = 0;
-  dwg.opts = loglevel;
 
   if (dwg.num_objects && strEQ (dwgfile, prev_dwgfile))
     ;
@@ -805,7 +803,7 @@ test_dxf (const struct _unknown_dxf *dxf, const char *restrict name,
     {
       if (dwg.num_objects && dwg.header.version > R_INVALID)
         dwg_free (&dwg);
-      dwg.opts = loglevel;
+      dwg.opts = tracelevel;
       if (dwg_read_file (dwgfile, &dwg) >= DWG_ERR_CRITICAL)
         {
           dwg_free (&dwg);
@@ -822,7 +820,7 @@ test_dxf (const struct _unknown_dxf *dxf, const char *restrict name,
           if (dwg.object[i].fixedtype >= DWG_TYPE_UNKNOWN_ENT)
             break;
           if (strNE (dwg.object[i].dxfname, dxf->name))
-            fprintf (stderr, "Invalid handle 0x%X for %s\n", dxf->handle, dxf->name);
+            LOG_WARN ("Invalid handle 0x%X for %s", dxf->handle, dxf->name)
           else
             error += test_object (&dwg, &dwg.object[i], dxf, name);
           break;
@@ -911,7 +909,7 @@ main (int argc, char *argv[])
                 {
                   free (dwgfile);
                   if (!g_counter) // use --enable-debug
-                    fprintf (stderr, "Unhandled %s\n", dxf->name);
+                    LOG_WARN ("Unhandled %s", dxf->name)
                   continue;
                 }
             }
@@ -929,7 +927,7 @@ main (int argc, char *argv[])
       // GH #268. skip 2018/Helix.dwg. podman works fine.
       if (is_docker && strEQ (dxffile, "test/test-data/2018/Helix.dxf"))
         {
-          fprintf (stderr, "Skip %s in docker\n", dwgfile);
+          LOG_ERROR ("Skip %s in docker", dwgfile)
           free (dwgfile);
           continue;
         }
@@ -949,7 +947,7 @@ main (int argc, char *argv[])
             strcpy (path, "../../../");
           strcat (path, dwgfile);
           if (stat (path, &attrib))
-            fprintf (stderr, "%s not found\n", path);
+            LOG_WARN ("%s not found\n", path)
           else
             error += test_dxf (dxf, name, path);
         }

@@ -5,8 +5,15 @@
 #include <stddef.h>
 #include <stdarg.h>
 #if defined(BITS_TEST_C) || defined(DECODE_TEST_C)
-#  include "../../src/bits.h"
+#  include "bits.h"
 #endif
+#ifndef DECODE_TEST_C
+  static unsigned int loglevel;
+#  define DWG_LOGLEVEL loglevel
+#  include "logging.h"
+#endif
+#include "config.h"
+#include "common.h"
 
 #if defined(_WIN32) && defined(HAVE_FUNC_ATTRIBUTE_MS_FORMAT) && !defined(__USE_MINGW_ANSI_STDIO)
 #  define ATTRIBUTE_FORMAT(x, y) __attribute__ ((format (ms_printf, x, y)))
@@ -25,6 +32,8 @@ static char buffer[512];
 
 int numpassed (void);
 int numfailed (void);
+int is_make_silent (void);
+
 static inline void pass (void);
 static void fail (const char *fmt, ...) ATTRIBUTE_FORMAT (1, 2);
 static void ok (const char *fmt, ...) ATTRIBUTE_FORMAT (1, 2);
@@ -50,7 +59,8 @@ ok (const char *fmt, ...)
   va_start (ap, fmt);
   vsnprintf (buffer, sizeof (buffer), fmt, ap);
   va_end (ap);
-  printf ("ok %d\t# %s\n", ++num, buffer);
+  if (loglevel >= 2)
+    printf ("ok %d\t# %s\n", ++num, buffer);
 }
 
 static inline void
@@ -70,8 +80,25 @@ fail (const char *fmt, ...)
   va_start (ap, fmt);
   vsnprintf (buffer, sizeof (buffer), fmt, ap);
   va_end (ap);
-  printf ("not ok %d\t# %s\n", ++num, buffer);
+  if (loglevel >= 2)
+    printf ("not ok %d\t# %s\n", ++num, buffer);
 }
+
+#if 0
+static void
+ATTRIBUTE_FORMAT (1, 2)
+todo (const char *fmt, ...)
+{
+  va_list ap;
+
+  va_start (ap, fmt);
+  vsnprintf (buffer, sizeof (buffer), fmt, ap);
+  va_end (ap);
+  if (loglevel >= 2)
+    printf ("not ok %d\t# TODO %s\n", ++num, buffer);
+  passed++;
+}
+#endif
 
 #if defined(BITS_TEST_C) || defined(DECODE_TEST_C)
 
@@ -147,3 +174,15 @@ strtobt (const char *binarystring)
 }
 
 #endif
+
+// make -s makes it silent, but can be overidden by VERBOSE=1
+int is_make_silent(void)
+{
+  const char *make = getenv("MAKEFLAGS");
+  if (!make)
+    return 0; 			// not from make: verbose
+  if (strstr (make, "-s") || memBEGINc (make, "s "))  // make check with -s
+    return getenv("VERBOSE") ? 0 : 1;
+  else
+    return 0; 			// make check without -s
+}

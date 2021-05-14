@@ -38,6 +38,21 @@
 // redeclare versions to be from, not target
 #include "importer.h"
 
+#undef LOG_POS
+#define LOG_POS                                                               \
+  LOG_INSANE (" @%lu.%u", obj ? dat->byte - obj->address : dat->byte, dat->bit)\
+  LOG_TRACE ("\n")
+#define LOG_RPOS                                                              \
+  LOG_INSANE (" @%lu.%u", dat->byte, dat->bit)                                \
+  LOG_TRACE ("\n")
+#define LOG_HPOS                                                              \
+  LOG_INSANE (" @%lu.%u",                                                     \
+              obj && hdl_dat->byte > obj->address                             \
+                  ? hdl_dat->byte - obj->address                              \
+                  : hdl_dat->byte,                                            \
+              hdl_dat->bit)                                                   \
+  LOG_TRACE ("\n")
+
 #define VALUE(value, type, dxf)                                               \
   LOG_TRACE (FORMAT_##type " [" #type " %d]\n", (BITCODE_##type)value, dxf)
 #define VALUE_RC(value, dxf) VALUE (value, RC, dxf)
@@ -102,8 +117,8 @@
             }                                                                 \
         }                                                                     \
       else                                                                    \
-        LOG_TRACE (#nam ": " FORMAT_##type " [" #type " %d]", _obj->nam,      \
-                   dxfgroup);                                                 \
+        LOG_TRACE (#nam ": " FORMAT_##type " [" #type " %d]",                 \
+                   (BITCODE_##type)_obj->nam, dxfgroup);                      \
       LOG_INSANE (" @%lu.%u", dat->byte, dat->bit)                            \
       LOG_TRACE ("\n")                                                        \
     }
@@ -140,7 +155,7 @@
     }
 #define LOG_TF(level, var, len)                                               \
   {                                                                           \
-    if (DWG_LOGLEVEL >= DWG_LOGLEVEL_##level || len <= 256)                   \
+    if (var && (DWG_LOGLEVEL >= DWG_LOGLEVEL_##level || len <= 256))          \
       {                                                                       \
         for (int _i = 0; _i < (len); _i++)                                    \
           {                                                                   \
@@ -148,7 +163,7 @@
           }                                                                   \
         LOG (level, "\n");                                                    \
       }                                                                       \
-    if (DWG_LOGLEVEL >= DWG_LOGLEVEL_INSANE)                                  \
+    if (var && (DWG_LOGLEVEL >= DWG_LOGLEVEL_INSANE))                         \
       {                                                                       \
         for (int _i = 0; _i < (len); _i++)                                    \
           {                                                                   \
@@ -193,8 +208,7 @@
           LOG_TRACE (#nam ": (" FORMAT_BD ", " FORMAT_BD ") [" #type " %d]",  \
                      _obj->nam.x, _obj->nam.y, dxf)                           \
         }                                                                     \
-      LOG_INSANE (" @%lu.%u", dat->byte, dat->bit)                            \
-      LOG_TRACE ("\n")                                                        \
+      LOG_POS;                                                                \
     }
 #define FIELD_3PT_TRACE(nam, type, dxf)                                       \
   if (DWG_LOGLEVEL >= DWG_LOGLEVEL_TRACE)                                     \
@@ -230,8 +244,7 @@
                      ") [" #type " %d]",                                      \
                      _obj->nam.x, _obj->nam.y, _obj->nam.z, dxf)              \
         }                                                                     \
-      LOG_INSANE (" @%lu.%u", dat->byte, dat->bit)                            \
-      LOG_TRACE ("\n")                                                        \
+      LOG_POS;                                                                \
     }
 
 #define FIELD_VALUE(nam) _obj->nam
@@ -373,7 +386,13 @@
     _obj->nam = bit_read_RL (dat);                                            \
     LOG_TRACE (#nam ": " FORMAT_RLd " [RLd %d]\n", _obj->nam, dxf);           \
   }
-#define FIELD_RC(nam, dxf) FIELDG (nam, RC, dxf)
+#define FIELD_RC(nam, dxf)                                                    \
+  {                                                                           \
+    _obj->nam = bit_read_RC (dat);                                            \
+    LOG_TRACE (#nam ": " FORMAT_RC " [RC %d]", ((BITCODE_RC)_obj->nam), dxf); \
+    LOG_INSANE (" @%lu.%u", dat->byte, dat->bit)                              \
+    LOG_TRACE ("\n")                                                          \
+  }
 #define FIELD_RCu(nam, dxf)                                                   \
   {                                                                           \
     _obj->nam = bit_read_RC (dat);                                            \
@@ -435,7 +454,7 @@
   }
 #define FIELD_TFF(nam, len, dxf)                                              \
   {                                                                           \
-    SINCE (R_13) { VECTOR_CHKCOUNT (nam, TF, len, dat) }                      \
+    SINCE (R_13) { _VECTOR_CHKCOUNT_STATIC (nam, len, 1, dat) }               \
     bit_read_fixed (dat, _obj->nam, (int)len);                                \
     LOG_TRACE (#nam ": \"%.*s\" [TFF %d " #dxf "]", (int)len, _obj->nam, (int)len); \
     LOG_INSANE (" @%lu.%u", dat->byte, dat->bit)                              \
@@ -444,7 +463,7 @@
   }
 #define FIELD_TFFx(nam, len, dxf)                                             \
   {                                                                           \
-    SINCE (R_13) { VECTOR_CHKCOUNT (nam, TF, len, dat) }                      \
+    SINCE (R_13) { _VECTOR_CHKCOUNT_STATIC (nam, len, 1, dat) }               \
     bit_read_fixed (dat, (BITCODE_RC*)_obj->nam, (int)len);                   \
     LOG_TRACE (#nam ": [TFFx %d " #dxf "]", (int)len);                        \
     LOG_INSANE (" @%lu.%u", dat->byte, dat->bit)                              \
@@ -499,16 +518,15 @@
     if (dat->from_version < R_2007)                                           \
       {                                                                       \
         _obj->nam = bit_read_TV (dat);                                        \
-        LOG_TRACE (#nam ": \"%s\" [T %d]", _obj->nam, dxf);                   \
-        LOG_INSANE (" @%lu.%u", dat->byte, dat->bit)                          \
-        LOG_TRACE ("\n")                                                      \
+        LOG_TRACE (#nam ": \"%s\" [T %d]", _obj->nam, dxf)                    \
+        LOG_POS;                                                              \
       }                                                                       \
     else                                                                      \
       {                                                                       \
         if (!obj || obj->has_strings) /* header_vars */                       \
           {                                                                   \
             _obj->nam = (BITCODE_T)bit_read_TU (str_dat);                     \
-            LOG_TRACE_TU (#nam, (BITCODE_TU)FIELD_VALUE (nam), dxf);          \
+            LOG_TRACE_TU (#nam, (BITCODE_TU)FIELD_VALUE (nam), dxf)          \
           }                                                                   \
         else                                                                  \
           {                                                                   \
@@ -532,6 +550,7 @@
       {                                                                       \
         LOG_TRACE (#nam ": (%f, %f, %f) [BE %d]\n", _obj->nam.x, _obj->nam.y, \
                    _obj->nam.z, dxf);                                         \
+        LOG_POS;                                                              \
       }                                                                       \
   }
 #define TRACE_DD                                                              \
@@ -803,6 +822,8 @@
                  dat->bit, bit_position (dat));                               \
     }
 #define _DEBUG_HERE(objsize)                                                  \
+  if (dat->size < dat->byte)                                                  \
+    return DWG_ERR_VALUEOUTOFBOUNDS;                                          \
   if (DWG_LOGLEVEL >= DWG_LOGLEVEL_TRACE)                                     \
     {                                                                         \
       Bit_Chain here = *dat;                                                  \
@@ -819,7 +840,7 @@
       tmp = bit_read_TF (dat, rs);                                            \
       if (DWG_LOGLEVEL >= DWG_LOGLEVEL_INSANE)                                \
         {                                                                     \
-          bit_fprint_bits (OUTPUT, tmp, rs*8);                                \
+          bit_fprint_bits (OUTPUT, tmp, rs * 8);                              \
           HANDLER (OUTPUT, "\n");                                             \
         }                                                                     \
       LOG_TRACE_TF (tmp, rs);                                                 \
@@ -927,6 +948,7 @@
       size = 0;                                                               \
       /* return DWG_ERR_VALUEOUTOFBOUNDS; */                                  \
     }
+// for static TFF types with a size field
 #define _VECTOR_CHKCOUNT(nam, size, maxelemsize, dat)                         \
   if ((long long)(size) > AVAIL_BITS (dat) ||                                 \
       (long long)((size) * (maxelemsize)) > AVAIL_BITS (dat))                 \
@@ -937,6 +959,18 @@
                  (long)(size), (unsigned)(size) * (maxelemsize),              \
                  AVAIL_BITS (dat), SAFEDXFNAME);                              \
       size = 0;                                                               \
+      return DWG_ERR_VALUEOUTOFBOUNDS;                                        \
+    }
+// for static TFF types with fixed size
+#define _VECTOR_CHKCOUNT_STATIC(nam, siz, maxelemsize, dat)                   \
+  if ((long long)(siz) > AVAIL_BITS (dat) ||                                  \
+      (long long)((siz) * (maxelemsize)) > AVAIL_BITS (dat) ||                \
+      dat->byte + (siz) > dat->size)                                          \
+    {                                                                         \
+      LOG_ERROR ("Invalid " #nam                                              \
+                 " size %ld. Need min. %u bits, have %lld for %s.",           \
+                 (long)(siz), (unsigned)(siz) * (maxelemsize),                \
+                 AVAIL_BITS (dat), SAFEDXFNAME);                              \
       return DWG_ERR_VALUEOUTOFBOUNDS;                                        \
     }
 #define HANDLE_VECTOR_CHKCOUNT(nam, size)                                     \
@@ -1011,16 +1045,15 @@
     {                                                                         \
       _VECTOR_CHKCOUNT (name, _obj->size,                                     \
                         dat->from_version >= R_2007 ? 18 : 2, dat)            \
-      _obj->name = (char**)calloc (_obj->size, sizeof (char *));              \
+      _obj->name = (char **)calloc (_obj->size, sizeof (char *));             \
       for (vcount = 0; vcount < (BITCODE_BL)_obj->size; vcount++)             \
         {                                                                     \
           PRE (R_2007)                                                        \
           {                                                                   \
             _obj->name[vcount] = bit_read_TV (dat);                           \
-            LOG_TRACE (#name "[%d]: \"%s\" [%s %d]", (int)vcount,             \
-                       _obj->name[vcount], #type, dxf)                        \
-            LOG_INSANE (" @%lu.%u", dat->byte, dat->bit)                      \
-            LOG_TRACE ("\n")                                                  \
+            LOG_TRACE (#name "[%d]: \"%s\" [TV %d]", (int)vcount,             \
+                       _obj->name[vcount], dxf)                               \
+            LOG_POS                                                           \
           }                                                                   \
           LATER_VERSIONS                                                      \
           {                                                                   \
@@ -1038,8 +1071,8 @@
       for (vcount = 0; vcount < (BITCODE_BL)size; vcount++)                   \
         {                                                                     \
           _obj->name[vcount] = bit_read_##type (dat);                         \
-          LOG_INSANE (#name "[%d]: " FORMAT_##type " [" #type " %d]\n",       \
-                      (int)vcount, _obj->name[vcount], _dxf++)                \
+          LOG_TRACE (#name "[%d]: " FORMAT_##type " [" #type " %d]\n",        \
+                     (int)vcount, _obj->name[vcount], _dxf++)                 \
         }                                                                     \
     }
 
@@ -1498,7 +1531,7 @@
     _obj->parent = obj->tio.entity;                                           \
     SINCE (R_13) { error = dwg_decode_entity (dat, hdl_dat, str_dat, _ent); } \
     else { error = decode_entity_preR13 (dat, obj, _ent); }                   \
-    if (error >= DWG_ERR_CRITICAL)                                            \
+    if (error >= DWG_ERR_CRITICAL || dat->byte > dat->size)                   \
       return error;
 
 // Does size include the CRC?
@@ -1598,7 +1631,7 @@
       {                                                                       \
         _obj = obj->tio.object->tio.token;                                    \
         error = dwg_decode_object (dat, hdl_dat, str_dat, obj->tio.object);   \
-        if (error >= DWG_ERR_CRITICAL)                                        \
+        if (error >= DWG_ERR_CRITICAL || dat->byte > dat->size)               \
           return error;                                                       \
       }
 

@@ -4,7 +4,6 @@ cd %APPVEYOR_BUILD_FOLDER%
 set MSYS2_DIR=msys64
 
 echo ARCH: %ARCH%
-echo Compiler: %COMPILER%
 echo MSYS2_ARCH: %MSYS2_ARCH%
 echo Platform: %PLATFORM%
 echo MSYS2 directory: %MSYS2_DIR%

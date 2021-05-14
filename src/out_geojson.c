@@ -1,7 +1,7 @@
 /*****************************************************************************/
 /*  LibreDWG - free implementation of the DWG file format                    */
 /*                                                                           */
-/*  Copyright (C) 2018-2020 Free Software Foundation, Inc.                   */
+/*  Copyright (C) 2018-2021 Free Software Foundation, Inc.                   */
 /*                                                                           */
 /*  This library is free software, licensed under the terms of the GNU       */
 /*  General Public License as published by the Free Software Foundation,     */
@@ -137,7 +137,8 @@ static unsigned int cur_ver = 0;
 #define ENDSEC() ENDARRAY
 #define OLD_NOCOMMA fseek (dat->fh, -2, SEEK_CUR)
 #define NOCOMMA assert(0 = "NOCOMMA")
-#define PAIR_S(name, str)                                                     \
+// guaranteed non-null str
+#define PAIR_Sc(name, str)                                                    \
   {                                                                           \
     const int len = strlen (str);                                             \
     if (len < 4096 / 6)                                                       \
@@ -157,12 +158,20 @@ static unsigned int cur_ver = 0;
         free (_buf);                                                          \
       }                                                                       \
   }
+#define PAIR_S(name, str)                                                     \
+  if (str)                                                                    \
+    PAIR_Sc (name, str)
 #define PAIR_D(name, value)                                                   \
   {                                                                           \
     PREFIX fprintf (dat->fh, "\"" #name "\": %d,\n", value);                  \
   }
-#define LASTPAIR_S(name, value)                                               \
+// guaranteed non-null str
+#define LASTPAIR_Sc(name, value)                                              \
   {                                                                           \
+    PREFIX fprintf (dat->fh, "\"" #name "\": \"%s\"\n", value);               \
+  }
+#define LASTPAIR_S(name, value)                                               \
+  if (value) {                                                                \
     PREFIX fprintf (dat->fh, "\"" #name "\": \"%s\"\n", value);               \
   }
 #define PAIR_NULL(name)                                                       \
@@ -406,9 +415,9 @@ dwg_geojson_feature (Bit_Chain *restrict dat, Dwg_Object *restrict obj,
   char *name;
   char tmp[64];
 
-  PAIR_S (type, "Feature");
+  PAIR_Sc (type, "Feature");
   sprintf (tmp, "%lX", obj->handle.value);
-  PAIR_S (id, tmp);
+  PAIR_Sc (id, tmp);
   KEY (properties);
   SAMEHASH;
   PAIR_S (SubClasses, subclass);
@@ -436,7 +445,7 @@ dwg_geojson_feature (Bit_Chain *restrict dat, Dwg_Object *restrict obj,
           && obj->tio.entity->color.index == 256)
         {
           sprintf (tmp, "#%06X", obj->tio.entity->color.rgb & 0xffffff);
-          PAIR_S (Color, tmp);
+          PAIR_Sc (Color, tmp);
         }
       else if ((obj->tio.entity->color.index != 256)
                || (dat->version >= R_2004
@@ -544,7 +553,7 @@ dwg_geojson_feature (Bit_Chain *restrict dat, Dwg_Object *restrict obj,
     }
   // PAIR_NULL(ExtendedEntity);
   sprintf (tmp, "%lX", obj->handle.value);
-  LASTPAIR_S (EntityHandle, tmp);
+  LASTPAIR_Sc (EntityHandle, tmp);
   ENDHASH;
 }
 
@@ -563,6 +572,8 @@ dwg_geojson_LWPOLYLINE (Bit_Chain *restrict dat, Dwg_Object *restrict obj, int i
   BITCODE_BL j, last_j;
   Dwg_Entity_LWPOLYLINE *_obj = obj->tio.entity->tio.LWPOLYLINE;
   dwg_point_2d *pts = (dwg_point_2d*)_obj->points;
+  if (!_obj->points)
+    return 1;
 
   FEATURE (AcDbEntity : AcDbLwPolyline, obj);
   // if closed and num_points > 3 use a Polygon
@@ -688,11 +699,14 @@ dwg_geojson_object (Bit_Chain *restrict dat, Dwg_Object *restrict obj, int is_la
         int changed = 0;
         dwg_point_2d *pts, *orig;
         Dwg_Entity_POLYLINE_2D *_obj = obj->tio.entity->tio.POLYLINE_2D;
-
+        numpts = dwg_object_polyline_2d_get_numpoints (obj, &error);
+        if (error || !numpts)
+          return 0;
+        pts = dwg_object_polyline_2d_get_points (obj, &error);
+        if (error || !pts)
+          return 0;
         // if closed and num_points > 3 use a Polygon
         FEATURE (AcDbEntity : AcDbPolyline, obj);
-        numpts = dwg_object_polyline_2d_get_numpoints (obj, &error);
-        pts = dwg_object_polyline_2d_get_points (obj, &error);
         if (_obj->flag & 512 && numpts > 3)
           {
             orig = pts; // pts is already a new copy
@@ -735,12 +749,16 @@ dwg_geojson_object (Bit_Chain *restrict dat, Dwg_Object *restrict obj, int is_la
         int error;
         BITCODE_BL j, numpts;
         dwg_point_3d *pts;
+        numpts = dwg_object_polyline_3d_get_numpoints (obj, &error);
+        if (error || !numpts)
+          return 0;
+        pts = dwg_object_polyline_3d_get_points (obj, &error);
+        if (error || !pts)
+          return 0;
         FEATURE (AcDbEntity : AcDbPolyline, obj);
         GEOMETRY (LineString);
         KEY (coordinates);
         ARRAY;
-        numpts = dwg_object_polyline_3d_get_numpoints (obj, &error);
-        pts = dwg_object_polyline_3d_get_points (obj, &error);
         for (j = 0; j < numpts; j++)
           {
             if (j == numpts - 1)
@@ -880,7 +898,7 @@ dwg_geojson_object (Bit_Chain *restrict dat, Dwg_Object *restrict obj, int is_la
     case DWG_TYPE_LWPOLYLINE:
       return dwg_geojson_LWPOLYLINE (dat, obj, is_last);
     default:
-      if (obj->type != obj->parent->layout_type)
+      if (obj->parent && obj->type != obj->parent->layout_type)
         return dwg_geojson_variable_type (obj->parent, dat, obj, is_last);
     }
   return 0;
@@ -900,7 +918,7 @@ geojson_entities_write (Bit_Chain *restrict dat, Dwg_Data *restrict dwg)
       if (is_last && !success) // needed for the LASTFEATURE comma. end with an empty dummy
         {
           HASH
-          PAIR_S (type, "Feature");
+          PAIR_Sc (type, "Feature");
           PAIR_NULL (properties);
           LASTPAIR_NULL (geometry);
           LASTENDHASH;
@@ -921,7 +939,7 @@ dwg_write_geojson (Bit_Chain *restrict dat, Dwg_Data *restrict dwg)
     goto fail;
 
   HASH;
-  PAIR_S (type, "FeatureCollection");
+  PAIR_Sc (type, "FeatureCollection");
 
   // array of features
   if (geojson_entities_write (dat, dwg))
@@ -931,15 +949,15 @@ dwg_write_geojson (Bit_Chain *restrict dat, Dwg_Data *restrict dwg)
   HASH;
   time (&rawtime);
   strftime (date, 12, "%Y-%m-%d", localtime (&rawtime));
-  PAIR_S (creation_date, date);
+  PAIR_Sc (creation_date, date);
   KEY (generator);
   HASH;
   KEY (author);
   HASH;
-  LASTPAIR_S (name, "dwgread");
+  LASTPAIR_Sc (name, "dwgread");
   ENDHASH;
-  PAIR_S (package, PACKAGE_NAME);
-  LASTPAIR_S (version, PACKAGE_VERSION);
+  PAIR_Sc (package, PACKAGE_NAME);
+  LASTPAIR_Sc (version, PACKAGE_VERSION);
   LASTENDHASH;
   // PAIR_S(license, "?");
   LASTENDHASH;

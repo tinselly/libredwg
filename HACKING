@@ -138,14 +138,16 @@ someone should probably think about and resolve them!
 
 * make release
 
-  This needs to be done with an in-tree ./configure, not in an extra build directory.
+  This might be needed to be done with an in-tree ./configure, not in an extra build directory.
+  It needs the default configure options, esp. the enabled bindings.
 
   Before a release:
   - update NEWS, .appveyor.yml, libredwg.spec manually
   - generate the missing ChangeLog entries
     e.g. via build-aux/gitlog-to-changelog --since='2018-11-05' >x
   - make distcheck
-  - push a smoke/ branch to check the CI results for linux, darwin, mingw and cygwin
+  - push a smoke/ branch to check the CI results for linux, darwin, freebsd, mingw
+    and cygwin.
   - create a temp. tag with the correct version number (see above):
     e.g. git tag -s -m 'release 0.6.2' 0.6.2
   - sh autogen.sh to update the version
@@ -155,7 +157,7 @@ someone should probably think about and resolve them!
     e.g. git commit -S --amend -a -m 'Release 0.6.2
     see NEWS'
   - merge it into master (ff)
-  - update the tag: git tag -d  0.6.2; git tag -s -m 'release 0.6.2' 0.6.2
+  - update the tag: git tag -d 0.6.2; git tag -s -m 'release 0.6.2' 0.6.2
   - make dist to create the source tarballs
   - push master and tags to run the CI and create the windows binaries on appveyor
   - upload the dist tarballs
@@ -166,7 +168,9 @@ someone should probably think about and resolve them!
   - edit the github release, copy from the previous and fix up the text with the sha256sum's,
     upload the dists and sigs to this page.
   - regen the docs, the refman and manual
-  - update the libredwg-cvs checkout for the docs and GNU homepage with the updated docs
+    make manual refman
+  - update the libredwg-cvs checkout for the docs and GNU homepage with the updated docs via
+    make release-web
   - create the announcement via build-aux/announce-gen (needs lots of args)
     and fixup the header with the NEWS
   - create a savannah news item with the announcement, and post it to the announcement
@@ -226,7 +230,6 @@ someone should probably think about and resolve them!
 On darwin I need to set AFL_CC and CC.
 
   make clean
-  export AFL_CC=clang-mp-3.8
   CC="afl-clang" ./configure --enable-trace --enable-write --disable-shared
   make
   mkdir fuzz-in; cp test/test-data/example_2000.dwg fuzz-in/
@@ -234,6 +237,19 @@ On darwin I need to set AFL_CC and CC.
 
 Using the fast option and an internal loop would be faster. I get 220/sec uninstrumented
 and 800/sec instrumented without -O2, which is fast enough to finish within 30m for a 32k DWG.
+
+Update: With honggfuzz:
+
+    ../configure --disable-shared --disable-bindings CC=hfuzz-clang CFLAGS='-O2 -g -fsanitize=address,undefined -fno-omit-frame-pointer -I/usr/local/include'
+    make -C src && make -C examples dwgfuzz
+    honggfuzz -i ../.fuzz-in-dxf -- examples/dwgfuzz -indxf ___FILE___
+
+I added a better examples/dwgfuzz for faster persisent mode and more coverage. Up to 2000/sec.
+There's also a new examples/llvmfuzz which finds even more bugs.
+
+    make -C src
+    clang -I../src -Isrc -g -O3 -fsanitize=address,fuzzer ../examples/llvmfuzz.c -Lsrc/.libs -lredwg
+    LD_LIBRARY_PATH=src/.libs ./a.out  -timeout=4000 -detect_leaks=0 -rss_limit_mb=8000 ../test/test-data/
 
 * adding other code
 
@@ -359,6 +375,12 @@ reverse-engineering them never stops. So it has to be automated somehow.
 
 There are also two more helpers bd and bits in examples/, which decode a bit
 pattern to the most likely value/type combination or all.
+
+* Convert unknown_bits HEX to binary
+
+Store the HEX string from the log into a file, like acds.hex.
+
+    perl -ne'$_ =~ s/(..)/chr(hex($1))/ge; print' acds.hex >acds.dat
 
 * etc
 #+STARTUP: odd

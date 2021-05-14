@@ -83,7 +83,9 @@ main (int argc, char *argv[])
   int flags = 0, on = 0, extnames = 0;
   char *filename_in;
   Dwg_Data dwg;
+  Dwg_Object *obj;
   Dwg_Object_LAYER *layer;
+  Dwg_Object_LAYER_CONTROL *_ctrl;
   int c;
 #ifdef HAVE_GETOPT_LONG
   int option_index = 0;
@@ -145,19 +147,28 @@ main (int argc, char *argv[])
   memset (&dwg, 0, sizeof (Dwg_Data));
   error = dwg_read_file (filename_in, &dwg);
   if (error >= DWG_ERR_CRITICAL)
-    fprintf (stderr, "READ ERROR %s: 0x%x\n", filename_in, error);
-
-  for (i = 0; i < dwg.layer_control.num_entries; i++)
     {
-      Dwg_Object *obj;
+      fprintf (stderr, "READ ERROR %s: 0x%x\n", filename_in, error);
+      goto done;
+    }
+
+  obj = dwg_get_first_object (&dwg, DWG_TYPE_LAYER_CONTROL);
+  if (!obj)
+    {
+      fprintf (stderr, "No layers found\n");
+      goto done;
+    }
+  _ctrl = obj->tio.object->tio.LAYER_CONTROL;
+  for (i = 0; i < _ctrl->num_entries; i++)
+    {
       char *name;
-      assert (dwg.layer_control.entries);
-      assert (dwg.layer_control.entries[i]);
-      obj = dwg.layer_control.entries[i]->obj;
+      assert (_ctrl->entries);
+      assert (_ctrl->entries[i]);
+      obj = _ctrl->entries[i]->obj;
       if (!obj || obj->type != DWG_TYPE_LAYER) // can be DICTIONARY also
         continue;
-      assert (dwg.layer_control.entries[i]->obj->tio.object);
-      layer = dwg.layer_control.entries[i]->obj->tio.object->tio.LAYER;
+      assert (_ctrl->entries[i]->obj->tio.object);
+      layer = _ctrl->entries[i]->obj->tio.object->tio.LAYER;
       if (on && (!layer->on || layer->frozen))
         continue;
       if (flags)
@@ -170,18 +181,27 @@ main (int argc, char *argv[])
         }
       else
         name = layer->name;
-      // since r2007 unicode, converted to utf-8
-      if (dwg.header.from_version >= R_2007)
+      if (!name)
         {
-          char *utf8 = bit_convert_TU ((BITCODE_TU)name);
-          printf ("%s\n", utf8);
-          free (utf8);
+          LOG_ERROR ("Invalid layer %lX ignored, empty name",
+                     _ctrl->entries[i]->obj->handle.value)
         }
       else
-        printf ("%s\n", name);
+        {
+          // since r2007 unicode, converted to utf-8
+          if (dwg.header.from_version >= R_2007)
+            {
+              char *utf8 = bit_convert_TU ((BITCODE_TU)name);
+              printf ("%s\n", utf8);
+              free (utf8);
+            }
+          else
+            printf ("%s\n", name);
+        }
       fflush (stdout);
     }
 
+ done:
   // forget about valgrind. really huge DWG's need endlessly here.
   if ((dwg.header.version && dwg.num_objects < 1000)
 #if defined __SANITIZE_ADDRESS__ || __has_feature(address_sanitizer)
